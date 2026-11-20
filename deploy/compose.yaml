@@ -1,0 +1,43 @@
+services:
+  dashboard:
+    image: mts-dashboard:${MTS_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        MTS_IMAGE_TAG: "${MTS_IMAGE_TAG:-local}"
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MTS_HOST_PORT:-8787}:8787"
+    volumes:
+      - type: bind
+        source: ${MTS_HOST_DATA_DIR:-../data/runtime}
+        target: /app/data/runtime
+        bind:
+          create_host_path: false
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      MTS_DATA_DIR: /app/data/runtime
+      MTS_DATA_POLL_MS: "${MTS_DATA_POLL_MS:-500}"
+      MTS_ITSM_URL_TEMPLATE: "${MTS_ITSM_URL_TEMPLATE:-}"
+      MTS_OPERATOR_TOKEN: "${MTS_OPERATOR_TOKEN:-}"
+      MTS_AI_MODE: "${MTS_AI_MODE:-rules}"
+      CODEX_SALE_BASE_URL: "${CODEX_SALE_BASE_URL:-https://codex.sale/v1}"
+      CODEX_SALE_API_KEY: "${CODEX_SALE_API_KEY:-}"
+      CODEX_SALE_MODEL: "${CODEX_SALE_MODEL:-}"
+      MTS_AI_TIMEOUT_MS: "${MTS_AI_TIMEOUT_MS:-8000}"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8787/healthz', { signal: AbortSignal.timeout(2000) })
+          .then(async (response) => { if (!response.ok || (await response.json()).status !== 'ok') process.exitCode = 1 })
+          .catch(() => { process.exitCode = 1 })
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
