@@ -1,0 +1,83 @@
+.service {
+  color: var(--text, #172333);
+}
+
+.service summary {
+  cursor: pointer;
+  font-weight: 680;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  max-width: 320px;
+  font-size: 14px;
+}
+
+.field input,
+.actions button,
+.quiet {
+  font: inherit;
+}
+
+.field input {
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions button,
+.quiet {
+  border: 1px solid #d5dbe3;
+  background: #fff;
+  color: inherit;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.actions button:disabled,
+.quiet:disabled {
+  cursor: progress;
+  color: #5c6b7e;
+}
+
+.message {
+  margin: 8px 0 0;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 35, 51, 0.32);
+}
+
+.confirm {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 32px));
+  background: #fff;
+  color: var(--text, #172333);
+  border-radius: var(--radius, 12px);
+  padding: 16px;
+}
+
+.confirmTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.confirmText {
+  margin: 8px 0 0;
+  color: #5c6b7e;
+}
