@@ -6,9 +6,11 @@
 !packages/
 !packages/**
 !data/
+data/**
 !data/demo/
 !data/demo/**
 !deploy/
+deploy/**
 !deploy/smoke.mjs
 
 **/.git
