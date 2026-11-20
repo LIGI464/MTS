@@ -1,0 +1,35 @@
+name: MTS checks
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+    branches: [main, "release/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Playwright Chromium
+        env:
+          MTS_AI_MODE: rules
+          MTS_OPERATOR_TOKEN: mts-ci-test-token
+        run: |
+          export MTS_DATA_DIR="$(mktemp -d "${RUNNER_TEMP}/mts-data.XXXXXX")"
+          trap 'rm -rf -- "$MTS_DATA_DIR"' EXIT
+          # B00 has the synthetic boot smoke; T51 adds production scenarios to the same suite.
+          npm run test:e2e
