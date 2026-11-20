@@ -1,0 +1,304 @@
+.shell {
+  min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
+  color: var(--text, #172333);
+  background: var(--bg, #f3f5f8);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.portal {
+  background: var(--surface, #fff);
+  border-bottom: 1px solid #d5dbe3;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px 8px;
+  height: 48px;
+  padding: 0 16px;
+  min-width: 0;
+}
+
+.catalog {
+  border-top: 1px solid #e4e9f0;
+}
+
+.brand {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.cluster,
+.actions,
+.catalog {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions {
+  margin-left: auto;
+}
+
+.trigger,
+.textButton,
+.close,
+.footerTrigger,
+.mobileToggle {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.trigger[data-state="open"],
+.footerTrigger[data-state="open"],
+.textButton[data-state="open"] {
+  color: var(--accent, #a82042);
+}
+
+.trigger:hover,
+.textButton:hover,
+.footerTrigger:hover,
+.link:hover {
+  color: var(--accent, #a82042);
+}
+
+.workspace {
+  padding: 16px 20px 28px;
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.health {
+  color: #5c6b7e;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.footer {
+  background: var(--surface, #fff);
+  border-top: 1px solid #d5dbe3;
+  padding: 16px 20px 24px;
+}
+
+.footerGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.footerTrigger {
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.footerContent {
+  padding-top: 8px;
+}
+
+.footerTools {
+  margin-top: 16px;
+}
+
+.slot {
+  margin-top: 12px;
+}
+
+.textButton {
+  padding: 6px 0;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mobileToggle {
+  display: none;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 35, 51, 0.32);
+}
+
+.panel,
+.sheet {
+  position: fixed;
+  background: var(--surface, #fff);
+  color: var(--text, #172333);
+  border-radius: var(--radius, 12px);
+  padding: 16px;
+  box-shadow: 0 18px 48px rgba(23, 35, 51, 0.16);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+}
+
+.panel {
+  top: 108px;
+  left: 16px;
+  width: min(440px, calc(100vw - 32px));
+}
+
+.sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: 24px;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panelTitle,
+.mobileHeading {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #d5dbe3;
+  background: #fff;
+}
+
+.description,
+.note {
+  margin: 10px 0 0;
+  color: #5c6b7e;
+  font-size: 14px;
+}
+
+.list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.demoItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.demoMark {
+  color: var(--accent, #a82042);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.link {
+  color: inherit;
+  font-weight: 650;
+}
+
+.mobileGroups {
+  display: grid;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+@media (max-width: 840px) {
+  .row {
+    height: auto;
+    min-height: 44px;
+    flex-wrap: wrap;
+    padding: 6px 12px;
+  }
+
+  .actions {
+    margin-left: 0;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .titleRow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .footerGrid {
+    display: none;
+  }
+
+  .footer {
+    padding-bottom: 88px;
+  }
+
+  .workspace {
+    padding: 12px 12px 88px;
+  }
+
+  .mobileToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: fixed;
+    z-index: 20;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    height: 44px;
+    border-radius: 999px;
+    background: #172333;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(23, 35, 51, 0.24);
+  }
+}
+
+@media (min-width: 841px) {
+  .portal {
+    max-height: 112px;
+  }
+}
