@@ -148,6 +148,31 @@ describe("Dashboard HTTP", () => {
     }
   });
 
+  it("streams an archive-only revision after the updated ticket is readable", async () => {
+    const live = join(root, LIVE_FILENAME);
+    await writeFile(live, JSON.stringify([incident]));
+    const server = await makeApp();
+    const address = await server.listen({ port: 0, host: "127.0.0.1" });
+    const client = await connectEvents(address);
+    try {
+      const initial = await client.next();
+      const solution = "Синтетическое решение";
+      await atomicWrite(live, Buffer.from(JSON.stringify([{ ...incident, solution }])));
+      const updated = await client.next();
+      expect(updated).toMatchObject({
+        revision: initial.revision + 1, incidents: initial.incidents, notices: initial.notices,
+      });
+      const response = await fetch(`${address}${API_PREFIX}/itsm/incidents/${incident.id}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toMatchObject({
+        solution, ticket: { state: "Assigned", hasSolution: true }, history: [{ solution }, { solution: null }],
+      });
+    } finally {
+      client.abort();
+    }
+  });
+
   it("streams complete snapshots to two clients and reconnects with the current journal", async () => {
     const live = join(root, LIVE_FILENAME);
     await writeFile(live, JSON.stringify([incident]));

@@ -1,4 +1,4 @@
-import type { Snapshot } from "@mts/contracts";
+import type { Snapshot, TicketDetail, TicketList } from "@mts/contracts";
 
 export type DashboardRuntimeOptions = {
   dataDir: string;
@@ -10,6 +10,8 @@ export type DashboardRuntimeOptions = {
 export type DashboardRuntime = {
   getSnapshot(): Snapshot;
   getDescription(id: string): string | null;
+  listTickets(): TicketList;
+  getTicket(id: string): TicketDetail | null;
   subscribe(listener: (snapshot: Snapshot) => void): () => void;
   resetTo(bytes: Uint8Array): Promise<Snapshot>;
   close(): Promise<void>;

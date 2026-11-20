@@ -1,9 +1,11 @@
+import { maxHeaderSize } from "node:http";
 import { basename, extname } from "node:path";
 import fastifyStatic from "@fastify/static";
 import { API_PREFIX, type ApiError } from "@mts/contracts";
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import { registerAnalysisRoutes } from "../analysis/index.js";
 import { registerDemoRoutes } from "../demo/index.js";
+import { registerItsmRoutes } from "../itsm/index.js";
 import type { RouteContext } from "../runtime-contract.js";
 import { registerEvents } from "./events.js";
 
@@ -15,6 +17,7 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
     logger: { level: "warn" },
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 8 * 1024,
+    routerOptions: { maxParamLength: maxHeaderSize },
   });
   app.addHook("onClose", async () => runtime.close());
 
@@ -25,6 +28,7 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
   registerEvents(app, runtime);
   registerDemoRoutes(app, context);
   registerAnalysisRoutes(app, context);
+  registerItsmRoutes(app, runtime);
 
   app.setErrorHandler((error, _request, reply) => {
     const status = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number"

@@ -32,3 +32,4 @@ export type {
   State,
 } from "./schemas.js";
 export { getSlaState, isActiveState } from "./sla.js";
+export type { HistoryEntry, TicketDetail, TicketList, TicketSummary } from "./itsm.js";

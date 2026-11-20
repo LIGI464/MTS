@@ -1,5 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { IncidentSchema, NoticeSchema, type Incident, type Notice } from "@mts/contracts";
+import { IncidentSchema, NoticeSchema, type Incident, type Notice, type TicketDetail, type TicketList } from "@mts/contracts";
+import type { SourceRecord } from "../source/input.js";
+import { prepareItsmArchive } from "./itsm.js";
 
 export type StoredDashboard = {
   revision: number;
@@ -10,11 +12,15 @@ export type StoredDashboard = {
 };
 
 type PendingNotice = Omit<Notice, "seq">;
-type DashboardState = Omit<StoredDashboard, "notices">;
+type DashboardState = Omit<StoredDashboard, "notices"> & { records: readonly SourceRecord[] };
+type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean };
+type SaveResult = Pick<StoredDashboard, "revision" | "notices">;
 
 export type DashboardStore = {
   load(): StoredDashboard | null;
-  save(state: DashboardState, events: readonly PendingNotice[], reset?: boolean): Notice[];
+  save(state: DashboardState, events: readonly PendingNotice[], options: SaveOptions): SaveResult | null;
+  listTickets(): TicketList;
+  getTicket(id: string): TicketDetail | null;
   close(): void;
 };
 
@@ -42,6 +48,7 @@ export function openDashboardStore(path: string): DashboardStore {
         at TEXT NOT NULL
       ) STRICT;
     `);
+    const archive = prepareItsmArchive(database);
     const dashboard = database.prepare(`
       SELECT revision, last_good_at AS lastGoodAt, incidents, descriptions
       FROM dashboard WHERE singleton = 1
@@ -105,18 +112,25 @@ export function openDashboardStore(path: string): DashboardStore {
           };
         });
       },
-      save(state, events, reset = false) {
+      save(state, events, { dashboardChanged, refreshSource, reset }) {
         return transaction("BEGIN IMMEDIATE", () => {
-          const { revision, lastGoodAt, incidents, descriptions } = state;
+          const { lastGoodAt, incidents, descriptions, records } = state;
+          const archiveChanged = archive.sync(records, lastGoodAt);
+          const changed = Boolean(dashboardChanged || archiveChanged || reset);
+          if (!changed && !refreshSource) return null;
+
+          const revision = state.revision + Number(changed);
           writeDashboard.run(revision, lastGoodAt, JSON.stringify(incidents), JSON.stringify(descriptions));
           if (reset) database.exec("DELETE FROM notices");
           for (const { kind, incidentId, title, at } of events) {
             appendNotice.run(kind, incidentId, title, at);
           }
           trimNotices.run();
-          return noticeList.parse(readNotices.all());
+          return { revision, notices: noticeList.parse(readNotices.all()) };
         });
       },
+      listTickets: archive.listTickets,
+      getTicket: archive.getTicket,
       close() {
         database.close();
       },

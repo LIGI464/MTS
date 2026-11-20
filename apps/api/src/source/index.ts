@@ -64,24 +64,24 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   }
 
   function accept(data: NormalizedIncidents, digest: string, reset = false): void {
-    const changed = snapshot.source.lastGoodAt === null
+    const dashboardChanged = snapshot.source.lastGoodAt === null
       || data.incidents.length !== snapshot.incidents.length
       || data.incidents.some((incident, index) => incident.version !== snapshot.incidents[index].version);
-    if (!changed && !reset && snapshot.source.status === "ok") {
-      acceptedDigest = digest;
-      return;
-    }
-
     const at = now();
-    const revision = snapshot.revision + Number(changed || reset);
     const groups = buildGroups(data.incidents);
     const events: Omit<Notice, "seq">[] = reset
       ? [{ kind: "demo.reset", incidentId: null, title: null, at }]
       : diffNotices(snapshot.source.lastGoodAt === null ? null : snapshot, { groups, incidents: data.incidents }, at);
-    const notices = store.save({ ...data, revision, lastGoodAt: at }, events, reset);
-    descriptions = new Map(data.descriptions);
-    snapshot = { ...snapshot, revision, incidents: data.incidents, groups, notices, source: { status: "ok", lastGoodAt: at } };
+    const saved = store.save({ ...data, revision: snapshot.revision, lastGoodAt: at }, events, {
+      dashboardChanged,
+      refreshSource: snapshot.source.status !== "ok",
+      reset,
+    });
     acceptedDigest = digest;
+    if (!saved) return;
+
+    descriptions = new Map(data.descriptions);
+    snapshot = { ...snapshot, ...saved, incidents: data.incidents, groups, source: { status: "ok", lastGoodAt: at } };
     publish();
   }
 
@@ -132,6 +132,8 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   return {
     getSnapshot,
     getDescription: (id) => descriptions.get(id) ?? null,
+    listTickets: store.listTickets,
+    getTicket: store.getTicket,
     subscribe(listener) {
       if (closed) return () => {};
       listeners.add(listener);
