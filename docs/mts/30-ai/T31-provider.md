@@ -1,0 +1,10 @@
+# T31 · Astra B · Клиент Responses API codex.sale
+
+Ты реализуешь транспорт провайдера. Ветка `feat/analysis` от SHA B00. Твои пути · `packages/analysis/src/provider/**` и `packages/analysis/tests/provider*`. Прочитай [контракт](../CONTRACT.md) и актуальную документацию провайдера, ссылка в конце.
+
+1. Экспортируй `requestProviderText(config, input, fetchImpl = fetch)` из `src/provider/index.ts`. Тип `config` содержит `apiKey: string`, `model: string`, `baseUrl: string`, `timeoutMs: number`. `input` — подготовленная строка. Склей нормализованный base URL и `/responses`. Базовый адрес по умолчанию `https://codex.sale/v1`. Передай `Authorization: Bearer <ключ>` и `Content-Type: application/json`. JSON тела · `{model, input, stream: false}`.
+2. Ограничь весь запрос и чтение ответа `AbortSignal.timeout(timeoutMs)`. Отключи редиректы, которые могли бы увести запрос на другой адрес. На успешном ответе собери текст из `output[].content[]` с `type="output_text"`, для совместимого ответа допустимо читаемое строковое `output_text` верхнего уровня. Пустой, неполный и невалидный ответ классифицируй отдельно. Не используй streaming для короткого результата.
+3. Экспортируй типизированную `ProviderError` с причиной `"timeout" | "provider_error" | "invalid_output"`. Для `401`, `402`, `429` и `5xx` сохраняй только код статуса и категория. Внутренние логи фильтруют текст провайдера и bearer. Повтор оплачиваемого запроса выполняется только явным новым действием пользователя.
+4. Unit-тесты с внедрённым `fetchImpl` проверяют URL, заголовки, форму тела, разбор стандартного ответа, пустой ответ и таймаут. Реальный smoke с ключом выполняется на доверенном стенде. Список моделей проверяется через `GET https://codex.sale/v1/models`. Значение `CODEX_SALE_MODEL` копируется как точный `id` модели, доступной текущему ключу.
+
+**Приёмка.** `npm test -- packages/analysis`, `npm run check` и `npm run build`. Если live-ключ не задан, в отчёте укажи выполненные mock-проверки и отложенный live. [Документация codex.sale](https://codex.sale/docs).
