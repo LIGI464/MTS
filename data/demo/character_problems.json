@@ -1,0 +1,71 @@
+[
+  {
+    "id": "INC000000000001",
+    "header": "Задержка обновления статусов заказов",
+    "productName": "Каталог услуг",
+    "service": "Обработка заказов",
+    "shortDescription": "Статусы новых заказов обновляются с задержкой.",
+    "description": "Синтетический инцидент: увеличилось время обработки очереди обновления заказов.",
+    "submitDate": "2025-01-01T11:10:00.000Z",
+    "deadline": "2025-01-01T12:30:00.000Z",
+    "assignedGroupName": "Поддержка платформы заказов",
+    "assignedEmployee": null,
+    "priorityId": 3,
+    "urgencyId": 3,
+    "impactId": 2,
+    "stateEnum": "Assigned",
+    "state": "Назначен"
+  },
+  {
+    "id": "INC000000000002",
+    "header": "Повышенное время ответа каталога",
+    "productName": "Каталог услуг",
+    "service": "Поиск",
+    "shortDescription": "Поиск по каталогу периодически отвечает медленнее обычного.",
+    "submitDate": "2025-01-01T11:35:00.000Z",
+    "deadline": "2025-01-01T12:45:00.000Z",
+    "assignedGroupName": "Поддержка поиска",
+    "priorityId": 3,
+    "urgencyId": 2,
+    "stateEnum": "WorkInProgress",
+    "state": "Выполняется"
+  },
+  {
+    "id": "INC000000000003",
+    "header": "Перебои доставки уведомлений",
+    "productName": "Уведомления",
+    "service": "Доставка сообщений",
+    "submitDate": "2025-01-01T11:45:00.000Z",
+    "deadline": "2025-01-01T12:50:00.000Z",
+    "assignedGroupName": "КЦ ИТ Координаторы Массовых Инцидентов",
+    "priorityId": 2,
+    "stateEnum": "WorkInProgress",
+    "state": "Выполняется"
+  },
+  {
+    "id": "INC000000000004",
+    "header": "Анализ задержки синхронизации",
+    "productName": "Каталог услуг",
+    "service": "Синхронизация",
+    "submitDate": "2025-01-01T10:15:00.000Z",
+    "completionDate": "2025-01-01T11:45:00.000Z",
+    "deadline": null,
+    "assignedGroupName": "КЦ ИТ Координаторы Массовых Инцидентов",
+    "priorityId": 2,
+    "stateEnum": "Research",
+    "state": "Исследование ситуации"
+  },
+  {
+    "id": "INC000000000005",
+    "header": "Восстановление очереди заказов",
+    "productName": "Каталог услуг",
+    "service": "Обработка заказов",
+    "submitDate": "2025-01-01T09:45:00.000Z",
+    "completionDate": "2025-01-01T10:25:00.000Z",
+    "deadline": "2025-01-01T11:00:00.000Z",
+    "assignedGroupName": "Поддержка платформы заказов",
+    "priorityId": 2,
+    "stateEnum": "Closed",
+    "state": "Закрыт"
+  }
+]
