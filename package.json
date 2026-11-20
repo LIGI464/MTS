@@ -1,0 +1,35 @@
+{
+  "name": "mts",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "prep:local": "npm run build -w @mts/contracts && npm run build -w @mts/analysis",
+    "dev:web": "node scripts/dev-web.mjs",
+    "dev:api": "npm run dev -w @mts/api",
+    "dev": "node scripts/dev.mjs",
+    "check": "npm run prep:local && npm run check -w @mts/contracts && npm run check -w @mts/analysis && npm run check -w @mts/api && npm run check -w @mts/web",
+    "test": "npm run prep:local && vitest run",
+    "build": "npm run build -w @mts/contracts && npm run build -w @mts/analysis && npm run build -w @mts/web && npm run build -w @mts/api",
+    "start": "node --env-file-if-exists=.env apps/api/dist/start.js",
+    "data:load": "node --env-file-if-exists=.env apps/api/dist/demo/cli/load.js",
+    "demo:step": "node --env-file-if-exists=.env apps/api/dist/demo/cli/step.js",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  },
+  "overrides": {
+    "vite": "7.3.8"
+  }
+}
