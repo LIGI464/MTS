@@ -47,9 +47,9 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
       index: false,
       allowedPath: (_path, _root, request) => !/^\/api(?:\/|\?|$)/.test(request.url),
       cacheControl: false,
-      setHeaders(response, path) {
+      setHeaders(reply, path) {
         const immutable = /[/\\]assets[/\\]/.test(path) && /-[\w-]{8,}\.[a-z0-9]+$/i.test(basename(path));
-        response.setHeader("Cache-Control", immutable ? "public, max-age=31536000, immutable" : "no-store");
+        reply.header("Cache-Control", immutable ? "public, max-age=31536000, immutable" : "no-store");
       },
     });
     app.get("/", async (_request, reply) => reply.header("Cache-Control", "no-store").sendFile("index.html"));
