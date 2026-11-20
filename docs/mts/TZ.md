@@ -64,9 +64,9 @@
 |---|---|---|
 | `setup/base` | Интегратор B00 | Корневые конфиги, пакетные манифесты, lockfile, `packages/contracts/**` и начальные интерфейсы остальных пакетов |
 | `feat/web` | Cursor B10 | `apps/web/src/**`, локальные проверки Web |
-| `feat/api` | Astra 6.2 A · облако, GitHub · B20 | `apps/api/src/**`, `apps/api/tests/**`, `data/demo/**` |
-| `feat/analysis` | Astra 6.2 B · облако, GitHub · B30 | `packages/analysis/src/**`, `packages/analysis/tests/**` |
-| `feat/deploy` | Astra 6.2 B · облако, GitHub · T41 | `deploy/**`, `.dockerignore`, `.github/workflows/mts.yml` |
+| `feat/api` | Astra 6.2 A · облако, GitHub · LIGI464 · B20 | `apps/api/src/**`, `apps/api/tests/**`, `data/demo/**` |
+| `feat/analysis` | Astra 6.2 B · облако, GitHub · Nekori123123 · B30 | `packages/analysis/src/**`, `packages/analysis/tests/**` |
+| `feat/deploy` | Astra 6.2 B · облако, GitHub · Nekori123123 · T41 | `deploy/**`, `.dockerignore`, `.github/workflows/mts.yml` |
 | `release/cybergarden` | Интегратор B50 | Интеграционные тесты `tests/e2e/**`, журнал `docs/mts/DEFENCE_LOG.md`, точечные исправления после слияния |
 
 Взаимодействие через контракт и точки экспорта из B00. Общий файл зависимостей редактирует один интегратор. Ветки стартуют с общего SHA. Для каждого промта агент сообщает изменённые пути, SHA и фактически выполненные проверки. Обе Astra 6.2 получают доступ только к репозиторию. Исполнитель 1 принимает релизный SHA, исполнитель 2 разворачивает его по T42 со своего ПК. Распределение доступа к VPS, DNS и ключам описано в [памятке](ACCESS.md).

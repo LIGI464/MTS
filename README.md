@@ -6,19 +6,19 @@
 
 | Исполнитель | Блоки | Ветка |
 |---|---|---|
-| Исполнитель 1 на ПК 1 | [B00 · Основа](docs/mts/00-foundation/B00.md) | `setup/base` |
-| Cursor на ПК 1 | [B10 · Интерфейс](docs/mts/10-web/B10.md) | `feat/web` и отдельные worktree для T11–T14 |
-| Astra 6.2 A в облаке · GitHub | [B20 · Данные и API](docs/mts/20-api/B20.md) | `feat/api` |
-| Astra 6.2 B в облаке · GitHub | [B30 · ИИ](docs/mts/30-ai/B30.md), затем [T41 · Docker и CI](docs/mts/40-release/T41-package.md) | `feat/analysis`, `feat/deploy` |
-| Исполнитель 2 на ПК 2 | [T42 · Развёртывание](docs/mts/40-release/T42-vps.md) по релизному SHA и проверка второго ПК | `release/cybergarden` |
+| LIGI464 на ПК 1 | [B00 · Основа](docs/mts/00-foundation/B00.md) | `setup/base` |
+| Чат №1 · Cursor на ПК 1 · LIGI464 | [B10 · Интерфейс](docs/mts/10-web/B10.md) | `feat/web` и отдельные worktree для T11–T14 |
+| Чат №2 · Astra 6.2 A в облаке · ПК 1 · LIGI464 | [B20 · Данные и API](docs/mts/20-api/B20.md) | `feat/api` |
+| Чат №3 · Astra 6.2 B в облаке · ПК 2 · Nekori123123 | [B30 · ИИ](docs/mts/30-ai/B30.md), затем [T41 · Docker и CI](docs/mts/40-release/T41-package.md) | `feat/analysis`, `feat/deploy` |
+| Nekori123123 на ПК 2 | [T42 · Развёртывание](docs/mts/40-release/T42-vps.md) по релизному SHA и проверка второго ПК | `release/cybergarden` |
 | Исполнитель 1 и оба ПК | [B50 · Сборка и защита](docs/mts/50-integration/B50.md) | `release/cybergarden` |
 
-Обе Astra 6.2 работают в облаке только с `LIGI464/MTS`. Они получают путь к промту и общий SHA, сдают свои ветки или PR. Исполнитель 1 ведёт Cursor и интеграцию. Исполнитель 2 запускает обе облачные задачи, принимает их результаты и разворачивает проверенный SHA со своего компьютера. Владелец VPS выполняет системные шаги, если они требуют администраторских прав.
+Обе Astra 6.2 работают в облаке только с `LIGI464/MTS`. Они получают путь к промту и общий SHA, сдают свои ветки или PR. LIGI464 на основном ПК запускает Cursor и облачную Astra A, затем ведёт интеграцию. Nekori123123 на втором ПК запускает облачную Astra B и разворачивает проверенный SHA. Владелец VPS выполняет системные шаги, если они требуют администраторских прав.
 
 [Кому выдать доступ и что запросить у исполнителей](docs/mts/ACCESS.md).
 
 1. Прочитайте [ТЗ](docs/mts/TZ.md) и [контракт](docs/mts/CONTRACT.md). Дайте одному агенту [T01](docs/mts/00-foundation/T01-workspaces.md) и затем [T02](docs/mts/00-foundation/T02-contracts.md).
-2. Слейте B00 и запишите SHA. На ПК 1 откройте Cursor, выдайте его агентам отдельные T11–T14 и отдельные worktree. T15 собирает их результат. Backend и AI берут свои индивидуальные промты из таблицы ниже.
+2. Слейте B00 и запишите SHA. На ПК 1 откройте Cursor, выдайте его агентам отдельные T11–T14 и отдельные worktree. T15 собирает их результат. LIGI464 передаёт этот же SHA облачной Astra A для API. Nekori123123 передаёт его облачной Astra B для ИИ и сборки. Индивидуальные промты приведены ниже.
 3. Исполнитель 1 запускает [T51](docs/mts/50-integration/T51-integrate.md) и передаёт итоговый SHA исполнителю 2 для [T42](docs/mts/40-release/T42-vps.md). Оба проходят [T52](docs/mts/50-integration/T52-rehearse.md) на общем VPS-стенде и локально на каждом ПК.
 
 ## Промты по задачам
