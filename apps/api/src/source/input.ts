@@ -74,7 +74,7 @@ export function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function fingerprint(row: Record<string, unknown>): string {
+export function fingerprint(row: Record<string, unknown>): string {
   return sha256(JSON.stringify(row, (_key, value: unknown) => {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
     const object = value as Record<string, unknown>;
@@ -111,10 +111,11 @@ export function normalizeIncidents(bytes: Uint8Array, itsmTemplate?: string): No
       raw: original[index],
       fingerprint: fingerprint(original[index]),
     };
-  }).sort((left, right) => left.incident.id < right.incident.id ? -1 : 1);
+  });
+  const sorted = records.toSorted((left, right) => left.incident.id < right.incident.id ? -1 : 1);
   return {
     records,
-    incidents: records.map(({ incident }) => incident),
-    descriptions: records.map(({ incident, description }) => [incident.id, description]),
+    incidents: sorted.map(({ incident }) => incident),
+    descriptions: sorted.map(({ incident, description }) => [incident.id, description]),
   };
 }

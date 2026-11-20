@@ -6,6 +6,7 @@ import Fastify, { LogController, type FastifyInstance } from "fastify";
 import { registerAnalysisRoutes } from "../analysis/index.js";
 import { registerDemoRoutes } from "../demo/index.js";
 import { registerItsmRoutes } from "../itsm/index.js";
+import { MutationError } from "../itsm/mutation.js";
 import type { RouteContext } from "../runtime-contract.js";
 import { registerEvents } from "./events.js";
 
@@ -28,9 +29,12 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
   registerEvents(app, runtime);
   registerDemoRoutes(app, context);
   registerAnalysisRoutes(app, context);
-  registerItsmRoutes(app, runtime);
+  registerItsmRoutes(app, context);
 
   app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof MutationError) {
+      return reply.code(error.status).send({ code: error.code, message: error.message } satisfies ApiError);
+    }
     const status = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number"
       ? error.statusCode : 500;
     if (status === 413) {

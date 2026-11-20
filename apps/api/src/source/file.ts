@@ -19,11 +19,12 @@ export async function stageWrite(path: string, bytes: Uint8Array): Promise<strin
   }
 }
 
-export async function atomicWrite(path: string, bytes: Uint8Array): Promise<void> {
+export async function atomicWrite(path: string, bytes: Uint8Array, beforeReplace?: () => Promise<void>): Promise<void> {
   const temp = await stageWrite(path, bytes);
   try {
     // Windows refuses to replace a file while a poll or scanner still has it open.
     for (let attempt = 0; ; attempt += 1) {
+      if (beforeReplace) await beforeReplace();
       try {
         await rename(temp, path);
         return;

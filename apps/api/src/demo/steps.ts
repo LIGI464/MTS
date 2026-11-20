@@ -22,6 +22,10 @@ export class DemoStepError extends Error {
   }
 }
 
+export function resolvedFields(completionDate: string) {
+  return { stateEnum: "Resolved", stateId: 7, state: STATE_LABELS.Resolved, completionDate } as const;
+}
+
 export function applyDemoStep(bytes: Uint8Array, step: DemoStep, nowMs = Date.now()): Uint8Array {
   const records = readIncidentBytes(bytes);
   // Use validated records to select a row, then edit the original export values.
@@ -60,10 +64,7 @@ export function applyDemoStep(bytes: Uint8Array, step: DemoStep, nowMs = Date.no
       raw.deadline = new Date(nowMs + 90_000).toISOString();
       break;
     case "resolve":
-      raw.stateEnum = "Resolved";
-      raw.stateId = 7;
-      raw.state = STATE_LABELS.Resolved;
-      raw.completionDate = new Date(nowMs).toISOString();
+      Object.assign(raw, resolvedFields(new Date(nowMs).toISOString()));
       break;
   }
   const updated = Buffer.from(`${JSON.stringify(original, null, 2)}\n`, "utf8");

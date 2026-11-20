@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
-import { IncidentSchema, NoticeSchema, type Incident, type Notice, type TicketDetail, type TicketList } from "@mts/contracts";
+import { IncidentSchema, NoticeSchema, type Incident, type MutationResult, type Notice } from "@mts/contracts";
 import type { SourceRecord } from "../source/input.js";
 import { prepareItsmArchive } from "./itsm.js";
+import { prepareMutationJournal, type PendingMutation } from "./mutations.js";
 
 export type StoredDashboard = {
   revision: number;
@@ -13,14 +14,16 @@ export type StoredDashboard = {
 
 type PendingNotice = Omit<Notice, "seq">;
 type DashboardState = Omit<StoredDashboard, "notices"> & { records: readonly SourceRecord[] };
-type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean };
-type SaveResult = Pick<StoredDashboard, "revision" | "notices">;
+type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean; mutation?: PendingMutation };
+type SaveResult = Pick<StoredDashboard, "revision" | "notices"> & { mutation?: MutationResult };
 
 export type DashboardStore = {
   load(): StoredDashboard | null;
   save(state: DashboardState, events: readonly PendingNotice[], options: SaveOptions): SaveResult | null;
-  listTickets(): TicketList;
-  getTicket(id: string): TicketDetail | null;
+  listTickets: ReturnType<typeof prepareItsmArchive>["listTickets"];
+  getTicket: ReturnType<typeof prepareItsmArchive>["getTicket"];
+  getTicketVersion: ReturnType<typeof prepareItsmArchive>["getVersion"];
+  mutations: Omit<ReturnType<typeof prepareMutationJournal>, "finish">;
   close(): void;
 };
 
@@ -49,6 +52,7 @@ export function openDashboardStore(path: string): DashboardStore {
       ) STRICT;
     `);
     const archive = prepareItsmArchive(database);
+    const mutations = prepareMutationJournal(database);
     const dashboard = database.prepare(`
       SELECT revision, last_good_at AS lastGoodAt, incidents, descriptions
       FROM dashboard WHERE singleton = 1
@@ -112,12 +116,12 @@ export function openDashboardStore(path: string): DashboardStore {
           };
         });
       },
-      save(state, events, { dashboardChanged, refreshSource, reset }) {
+      save(state, events, { dashboardChanged, refreshSource, reset, mutation }) {
         return transaction("BEGIN IMMEDIATE", () => {
           const { lastGoodAt, incidents, descriptions, records } = state;
           const archiveChanged = archive.sync(records, lastGoodAt);
           const changed = Boolean(dashboardChanged || archiveChanged || reset);
-          if (!changed && !refreshSource) return null;
+          if (!changed && !refreshSource && !mutation) return null;
 
           const revision = state.revision + Number(changed);
           writeDashboard.run(revision, lastGoodAt, JSON.stringify(incidents), JSON.stringify(descriptions));
@@ -126,11 +130,24 @@ export function openDashboardStore(path: string): DashboardStore {
             appendNotice.run(kind, incidentId, title, at);
           }
           trimNotices.run();
-          return { revision, notices: noticeList.parse(readNotices.all()) };
+          const result: SaveResult = { revision, notices: noticeList.parse(readNotices.all()) };
+          if (mutation) {
+            const ticket = archive.getVersion(mutation.id);
+            if (!ticket?.present) throw new Error("Заявка отсутствует в принятом снимке.");
+            result.mutation = { id: mutation.id, version: ticket.version, revision };
+            mutations.finish(mutation.requestId, result.mutation);
+          }
+          if (reset) {
+            const pending = mutations.getPending();
+            if (pending) mutations.discard(pending.requestId);
+          }
+          return result;
         });
       },
       listTickets: archive.listTickets,
       getTicket: archive.getTicket,
+      getTicketVersion: archive.getVersion,
+      mutations,
       close() {
         database.close();
       },

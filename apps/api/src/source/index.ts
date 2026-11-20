@@ -1,12 +1,14 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { Notice, Snapshot } from "@mts/contracts";
+import type { MutationResult, Notice, Snapshot } from "@mts/contracts";
 import { buildGroups, diffNotices } from "../domain/index.js";
+import { MutationError, planMutation, type ItsmCommand } from "../itsm/mutation.js";
 import type { DashboardRuntime, DashboardRuntimeOptions } from "../runtime-contract.js";
 import { openDashboardStore } from "../store/index.js";
+import type { PendingMutation } from "../store/mutations.js";
 import { atomicWrite, isMissingFile } from "./file.js";
-import { LIVE_FILENAME, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
+import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
 
 export async function createDashboardRuntime(options: DashboardRuntimeOptions): Promise<DashboardRuntime> {
   await mkdir(options.dataDir, { recursive: true });
@@ -63,7 +65,11 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     publish();
   }
 
-  function accept(data: NormalizedIncidents, digest: string, reset = false): void {
+  function accept(
+    data: NormalizedIncidents,
+    digest: string,
+    { reset = false, mutation }: { reset?: boolean; mutation?: PendingMutation } = {},
+  ): MutationResult | undefined {
     const dashboardChanged = snapshot.source.lastGoodAt === null
       || data.incidents.length !== snapshot.incidents.length
       || data.incidents.some((incident, index) => incident.version !== snapshot.incidents[index].version);
@@ -76,13 +82,30 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
       dashboardChanged,
       refreshSource: snapshot.source.status !== "ok",
       reset,
+      mutation,
     });
     acceptedDigest = digest;
     if (!saved) return;
 
+    const { revision, notices } = saved;
     descriptions = new Map(data.descriptions);
-    snapshot = { ...snapshot, ...saved, incidents: data.incidents, groups, source: { status: "ok", lastGoodAt: at } };
+    snapshot = { ...snapshot, revision, notices, incidents: data.incidents, groups, source: { status: "ok", lastGoodAt: at } };
     publish();
+    return saved.mutation;
+  }
+
+  function acceptCurrent(data: NormalizedIncidents, digest: string): void {
+    const pending = store.mutations.getPending();
+    if (pending) {
+      // A restart may find the replacement plus later edits to unrelated rows.
+      const target = data.records.find(({ incident }) => incident.id === pending.id);
+      if (target?.fingerprint === pending.targetFingerprint) {
+        accept(data, digest, { mutation: pending });
+        return;
+      }
+      store.mutations.discard(pending.requestId);
+    }
+    if (digest !== acceptedDigest || snapshot.source.status !== "ok") accept(data, digest);
   }
 
   async function poll(): Promise<void> {
@@ -99,12 +122,85 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
         pendingDigest = digest;
         return;
       }
-      accept(normalizeIncidents(bytes, options.itsmTemplate), digest);
+      acceptCurrent(normalizeIncidents(bytes, options.itsmTemplate), digest);
       pendingDigest = undefined;
     } catch {
       pendingDigest = undefined;
       markSourceFailed();
     }
+  }
+
+  function completedMutation(requestId: string, commandFingerprint: string): MutationResult | undefined {
+    const prior = store.mutations.getCompleted(requestId);
+    if (!prior) return undefined;
+    if (prior.fingerprint !== commandFingerprint) {
+      throw new MutationError(409, "REQUEST_ID_CONFLICT", "Этот requestId уже использован для другого действия.");
+    }
+    return prior.result;
+  }
+
+  async function readForMutation() {
+    try {
+      const bytes = await readFile(livePath);
+      const digest = sha256(bytes);
+      if (digest !== failedResetDigest) return { bytes, digest, data: normalizeIncidents(bytes, options.itsmTemplate) };
+    } catch {
+      // The last accepted snapshot stays available while the live file is invalid or missing.
+    }
+    markSourceFailed();
+    throw new MutationError(409, "SOURCE_UNAVAILABLE", "Рабочий файл отсутствует, повреждён или недоступен.");
+  }
+
+  async function requireSourceDigest(expected: string): Promise<void> {
+    const bytes = await readFile(livePath).catch(() => null);
+    if (bytes === null || sha256(bytes) !== expected) {
+      throw new MutationError(409, "SOURCE_CHANGED", "Рабочий файл изменился. Перечитайте карточку и повторите действие.");
+    }
+  }
+
+  async function applyMutation(command: ItsmCommand): Promise<MutationResult> {
+    const { requestId: suppliedId, ...intent } = command;
+    const requestId = suppliedId.toLowerCase();
+    const commandFingerprint = fingerprint(intent);
+    const prior = completedMutation(requestId, commandFingerprint);
+    if (prior) return prior;
+
+    const current = await readForMutation();
+    acceptCurrent(current.data, current.digest);
+    pendingDigest = undefined;
+    const recovered = completedMutation(requestId, commandFingerprint);
+    if (recovered) return recovered;
+
+    const { id, rows } = planMutation(command, current.data.records, store.getTicketVersion, now());
+    const updated = Buffer.from(`${JSON.stringify(rows, null, 2)}\n`);
+    const data = normalizeIncidents(updated, options.itsmTemplate);
+    const target = data.records.find(({ incident }) => incident.id === id);
+    if (!target) throw new Error("Изменённая заявка отсутствует в рабочем файле.");
+    const digest = sha256(updated);
+    const pending = { requestId, fingerprint: commandFingerprint, id, targetFingerprint: target.fingerprint };
+    store.mutations.begin(pending);
+    try {
+      await atomicWrite(livePath, updated, () => requireSourceDigest(current.digest));
+    } catch (error) {
+      store.mutations.discard(requestId);
+      throw error;
+    }
+
+    let result: MutationResult | undefined;
+    try {
+      result = accept(data, digest, { mutation: pending });
+    } catch (error) {
+      try {
+        await atomicWrite(livePath, current.bytes, () => requireSourceDigest(digest));
+        store.mutations.discard(requestId);
+      } catch {
+        // If rollback is interrupted, a valid file will settle the pending operation on the next read.
+        markSourceFailed();
+      }
+      throw error;
+    }
+    if (!result) throw new Error("Результат операции отсутствует.");
+    return result;
   }
 
   function enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -134,6 +230,10 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     getDescription: (id) => descriptions.get(id) ?? null,
     listTickets: store.listTickets,
     getTicket: store.getTicket,
+    async mutate(command) {
+      if (closed) throw new Error("Источник уже остановлен.");
+      return enqueue(() => applyMutation(command));
+    },
     subscribe(listener) {
       if (closed) return () => {};
       listeners.add(listener);
@@ -150,10 +250,21 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
           throw error;
         });
 
+        if (previous && store.mutations.getPending()) {
+          const previousDigest = sha256(previous);
+          if (previousDigest !== failedResetDigest) {
+            try {
+              acceptCurrent(normalizeIncidents(previous, options.itsmTemplate), previousDigest);
+            } catch (error) {
+              if (!(error instanceof InvalidIncidentFile)) throw error;
+            }
+          }
+        }
+
         await atomicWrite(livePath, input);
         pendingDigest = undefined;
         try {
-          accept(data, digest, true);
+          accept(data, digest, { reset: true });
           failedResetDigest = undefined;
           return getSnapshot();
         } catch (error) {

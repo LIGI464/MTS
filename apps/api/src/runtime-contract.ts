@@ -1,4 +1,5 @@
-import type { Snapshot, TicketDetail, TicketList } from "@mts/contracts";
+import type { MutationResult, Snapshot, TicketDetail, TicketList } from "@mts/contracts";
+import type { ItsmCommand } from "./itsm/mutation.js";
 
 export type DashboardRuntimeOptions = {
   dataDir: string;
@@ -12,6 +13,7 @@ export type DashboardRuntime = {
   getDescription(id: string): string | null;
   listTickets(): TicketList;
   getTicket(id: string): TicketDetail | null;
+  mutate(command: ItsmCommand): Promise<MutationResult>;
   subscribe(listener: (snapshot: Snapshot) => void): () => void;
   resetTo(bytes: Uint8Array): Promise<Snapshot>;
   close(): Promise<void>;

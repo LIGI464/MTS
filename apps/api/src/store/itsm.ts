@@ -59,6 +59,9 @@ export function prepareItsmArchive(database: DatabaseSync) {
     SELECT i.id AS incidentId, h.fingerprint, h.raw, h.ticket FROM itsm_incidents i
     JOIN itsm_history h ON h.seq = i.latest_seq WHERE h.present = 1 ORDER BY i.id
   `);
+  const currentVersion = database.prepare(`
+    SELECT h.version, h.present FROM itsm_incidents i JOIN itsm_history h ON h.seq = i.latest_seq WHERE i.id = ?
+  `);
   const historyRows = database.prepare(`
     SELECT version, at, present, raw, ticket FROM itsm_history
     WHERE incident_id = ? ORDER BY seq DESC
@@ -103,6 +106,10 @@ export function prepareItsmArchive(database: DatabaseSync) {
     },
     listTickets(): TicketList {
       return { items: (currentRows.all() as SummaryRow[]).map(readSummary) };
+    },
+    getVersion(id: string): { version: string; present: boolean } | null {
+      const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;
+      return row ? { version: row.version, present: row.present === 1 } : null;
     },
     getTicket(id: string): TicketDetail | null {
       const rows = historyRows.all(id) as (SummaryRow & Pick<HistoryRow, "raw" | "at">)[];
