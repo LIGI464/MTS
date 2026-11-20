@@ -10,7 +10,8 @@ RUN npm ci
 
 COPY . .
 # B00 has no data/demo directory. T23 supplies the fixture at integration.
-RUN npm run build && npm prune --omit=dev && mkdir -p data/demo
+RUN npm run build && npm prune --omit=dev && mkdir -p data/demo \
+    && chmod -R a+rX /app
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
