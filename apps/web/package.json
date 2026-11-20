@@ -1,0 +1,26 @@
+{
+  "name": "@mts/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mts/contracts": "*",
+    "@radix-ui/react-accordion": "1.3.1",
+    "@radix-ui/react-dialog": "1.3.1",
+    "@tanstack/react-query": "5.108.2",
+    "lucide-react": "1.77.0",
+    "react": "19.2.9",
+    "react-dom": "19.2.9"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "vite": "7.3.8"
+  }
+}
