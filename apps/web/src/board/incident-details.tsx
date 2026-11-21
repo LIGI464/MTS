@@ -58,12 +58,14 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, onShown
   }, [hasDetails, onShown]);
 
   return (
-    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog.Root open modal={false} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className={`detail ${styles.panel}`} data-surface="surface"
           onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus(); }}
-          onEscapeKeyDown={(event) => { if (assistantEscape) event.preventDefault(); }}>
+          onEscapeKeyDown={(event) => { if (assistantEscape) event.preventDefault(); }}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}>
           <div className="detail-heading">
             <div>
               <Dialog.Description className="detail-id" data-numeric="tabular">{id}</Dialog.Description>
