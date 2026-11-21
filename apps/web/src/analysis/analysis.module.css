@@ -1,0 +1,87 @@
+.panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.toolbar,
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color var(--motion) ease, border-color var(--motion) ease, color var(--motion) ease;
+}
+
+.panel button.launch {
+  background: var(--button);
+  color: var(--on-button);
+  border-color: var(--button);
+  font-weight: 500;
+}
+
+.panel button.launch:hover:not(:disabled),
+.panel button.launch:active:not(:disabled) {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-button);
+}
+
+.panel button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.status,
+.result p,
+.error {
+  margin: 0;
+}
+
+.status {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.result {
+  display: grid;
+  gap: 8px;
+  font-family: var(--font-text);
+}
+
+.summary {
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.recommendation {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.source {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.result ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.error {
+  color: var(--critical);
+}
