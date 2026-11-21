@@ -17,7 +17,8 @@ export function PortalFooter({
 }) {
   return (
     <>
-      <footer className={styles.footer}>
+      <footer className={styles.footer} data-surface="surface">
+        <div className={styles.band}>
         <Accordion.Root className={styles.footerGrid} type="single" collapsible>
           {footerMenus.map((menu) => (
             <Accordion.Item className={styles.footerItem} key={menu.id} value={menu.id}>
@@ -54,6 +55,7 @@ export function PortalFooter({
           </NavigationDialog>
         </div>
         <div className={styles.slot}>{footerSlot}</div>
+        </div>
       </footer>
       <NavigationDialog
         open={openMenu === "mobile-sections"}

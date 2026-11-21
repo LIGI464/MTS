@@ -5,10 +5,12 @@ import styles from "./shell.module.css";
 
 export function AppShell({
   children,
+  title,
   healthBadge,
   footerSlot,
 }: {
   children: ReactNode;
+  title: string;
   healthBadge: ReactNode;
   footerSlot: ReactNode;
 }) {
@@ -22,12 +24,17 @@ export function AppShell({
   }
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-surface="canvas">
       <PortalHeader openMenu={openMenu} onOpenChange={onOpenChange} />
       <main className={styles.workspace}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>Пульт координатора</h1>
-          <div className={styles.health}>{healthBadge}</div>
+          <h1 className={styles.title}>{title}</h1>
+          <div className={styles.health}>
+            {healthBadge}
+            <a className={styles.link} href="/itsm/incidents">
+              Реестр ITSM
+            </a>
+          </div>
         </div>
         {children}
       </main>

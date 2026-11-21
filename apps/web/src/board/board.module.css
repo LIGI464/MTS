@@ -1,7 +1,7 @@
 .board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-section);
   align-items: stretch;
   min-width: 0;
 }
@@ -11,9 +11,9 @@
   flex-direction: column;
   min-width: 0;
   max-height: calc((100vh - 112px - 96px) / 2);
-  background: var(--surface, #fff);
-  border-radius: var(--radius, 12px);
-  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-section);
+  padding: var(--space-section);
 }
 
 .groupHead {
@@ -25,7 +25,9 @@
 
 .groupHead h2 {
   margin: 0;
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: var(--queue-size);
+  font-weight: 500;
 }
 
 .count,
@@ -44,21 +46,21 @@
 
 .empty {
   margin: 8px 0 0;
-  color: #5c6b7e;
+  color: var(--muted);
 }
 
 .card {
   min-width: 0;
-  border: 1px solid #d5dbe3;
-  border-radius: var(--radius, 12px);
-  padding: 10px 12px;
-  background: var(--surface, #fff);
-  color: var(--text, #172333);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .card p {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--text-size-compact);
 }
 
 .title,
@@ -76,17 +78,17 @@
   padding: 0;
   border: 0;
   text-align: left;
-  font-size: 16px;
-  font-weight: 680;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--incident-size);
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .id {
   margin: 2px 0 0;
-  color: #5c6b7e;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: var(--text-size-compact);
 }
 
 .time {
@@ -104,25 +106,52 @@
 }
 
 .action {
-  border: 1px solid currentColor;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
   padding: 4px 8px;
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--meta-size);
+  transition: background-color var(--motion) ease, border-color var(--motion) ease, color var(--motion) ease;
+}
+
+a.primary {
+  background: var(--button);
+  color: var(--on-button);
+  border-color: var(--button);
+  font-weight: 500;
+}
+
+a.primary:hover,
+a.primary:active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-button);
+}
+
+button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+button.secondary:hover,
+button.secondary:active {
+  border-color: var(--text);
+  color: var(--text);
 }
 
 .alert {
-  border-color: #a82042;
-  color: #a82042;
+  border-color: var(--critical);
+  color: var(--critical);
 }
 
 .near {
-  border-color: #b7791f;
-  color: #8a5a12;
+  border-color: var(--warning-mark);
+  color: var(--warning);
 }
 
 .calm {
-  color: var(--text, #172333);
+  color: var(--text);
 }
 
 @media (max-width: 800px) {

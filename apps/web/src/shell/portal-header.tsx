@@ -1,5 +1,5 @@
 import { ChevronDown, MapPin } from "lucide-react";
-import { audienceMenus, brandLabel, catalogMenus, regionMenu, SHOWCASE_URL } from "./nav";
+import { audienceMenus, brandLabel, catalogMenus, regionMenu, SHOWCASE_URL, workLinks } from "./nav";
 import { MenuList } from "./menu-list";
 import { NavigationDialog } from "./navigation-dialog";
 import styles from "./shell.module.css";
@@ -12,9 +12,17 @@ export function PortalHeader({
   onOpenChange: (id: string, open: boolean) => void;
 }) {
   return (
-    <header className={styles.portal}>
+    <header className={styles.portal} data-surface="surface">
+      <div className={styles.band}>
       <div className={styles.row}>
         <p className={styles.brand}>{brandLabel}</p>
+        <nav className={styles.work} aria-label="Разделы пульта">
+          {workLinks.map((link) => (
+            <a key={link.href} href={link.href} aria-current={link.href === "/admin/incidents" ? "page" : undefined}>
+              {link.label}
+            </a>
+          ))}
+        </nav>
         <nav className={styles.cluster} aria-label="Аудитории">
           {audienceMenus.map((menu) => (
             <NavigationDialog
@@ -102,6 +110,7 @@ export function PortalHeader({
           </NavigationDialog>
         ))}
       </nav>
+      </div>
     </header>
   );
 }

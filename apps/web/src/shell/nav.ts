@@ -16,6 +16,12 @@ export type NavMenu = {
 
 export const brandLabel = "goida-code · Кейс МТС";
 
+export const workLinks = [
+  { label: "Пульт", href: "/admin/incidents" },
+  { label: "Реестр ITSM", href: "/itsm/incidents" },
+  { label: "Разработчикам", href: "/dev" },
+] as const;
+
 export const audienceMenus: NavMenu[] = [
   {
     id: "private",
@@ -125,6 +131,24 @@ export const catalogMenus: NavMenu[] = [
 ];
 
 export const footerMenus: NavMenu[] = [
+  {
+    id: "footer-pult",
+    label: "Пульт",
+    description: "Очередь координатора.",
+    items: [{ label: "Очередь инцидентов", href: "/admin/incidents" }],
+  },
+  {
+    id: "footer-itsm",
+    label: "ITSM",
+    description: "Реестр заявок.",
+    items: [{ label: "Реестр", href: "/itsm/incidents" }],
+  },
+  {
+    id: "footer-dev",
+    label: "Разработка",
+    description: "Сценарии стенда.",
+    items: [{ label: "Сценарии", href: "/dev" }],
+  },
   {
     id: "footer-connection",
     label: "Связь и дом",

@@ -46,7 +46,12 @@ export function AnalysisPanel({
   return (
     <section className={styles.panel} aria-label="ИИ-анализ">
       <div className={styles.toolbar}>
-        <button type="button" disabled={state.phase === "pending"} onClick={() => void analyze()}>
+        <button
+          type="button"
+          className={styles.launch}
+          disabled={state.phase === "pending"}
+          onClick={() => void analyze()}
+        >
           {state.phase === "pending" ? "Анализ выполняется" : "ИИ-анализ"}
         </button>
       </div>
@@ -61,19 +66,21 @@ export function AnalysisPanel({
       ) : null}
       {result ? (
         <div className={styles.result}>
-          <p>{result.summary}</p>
-          <p>{result.recommendedTeam?.name ?? "Команда не определена"}</p>
-          {result.recommendedTeam ? <p>{result.recommendedTeam.reason}</p> : null}
-          <p>Риск: {riskLabel(result.risk.level, result.reason)}</p>
+          <p className={styles.summary}>{result.summary}</p>
+          <p className={styles.recommendation}>{result.recommendedTeam?.name ?? "Команда не определена"}</p>
+          {result.recommendedTeam ? <p className={styles.recommendation}>{result.recommendedTeam.reason}</p> : null}
+          <p className={styles.recommendation}>Риск: {riskLabel(result.risk.level, result.reason)}</p>
           {result.risk.factors.length > 0 ? (
-            <ul>
+            <ul className={styles.recommendation}>
               {result.risk.factors.map((factor) => (
                 <li key={factor}>{explainFactor(factor)}</li>
               ))}
             </ul>
           ) : null}
-          {result.reason && result.risk.level !== "not_applicable" ? <p>{reasonLabel(result.reason)}</p> : null}
-          <p>{sourceLabel(result.source)}</p>
+          {result.reason && result.risk.level !== "not_applicable" ? (
+            <p className={styles.recommendation}>{reasonLabel(result.reason)}</p>
+          ) : null}
+          <p className={styles.source}>{sourceLabel(result.source)}</p>
         </div>
       ) : null}
     </section>

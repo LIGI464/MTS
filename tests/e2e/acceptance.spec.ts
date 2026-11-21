@@ -164,12 +164,13 @@ test("A7 показывает локальные правила, мок codex.sa
   await expect(page.getByText("Данные актуальны")).toBeVisible();
 });
 
-test("A8 открывает ITSM по шаблону и локальную карточку без него", async ({ page }) => {
+test("A8 открывает ITSM по шаблону и локальный адрес без него", async ({ page }) => {
   const linked = await openApp("rules", "https://itsm.example/incidents/{id}");
   await openDashboard(page, linked);
   const link = card(page, "У координаторов", "INC000000000003").getByRole("link", { name: "В ITSM" });
   await expect(link).toHaveAttribute("href", "https://itsm.example/incidents/INC000000000003");
   await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   await page.context().route("https://itsm.example/**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -183,12 +184,21 @@ test("A8 открывает ITSM по шаблону и локальную ка�
   await expect(popup).toHaveURL("https://itsm.example/incidents/INC000000000003");
   await expect(popup.getByText("INC000000000003")).toBeVisible();
   await popup.close();
+  await card(page, "У координаторов", "INC000000000003").getByRole("button", { name: "Детали" }).click();
+  await expect(page.getByRole("dialog").getByRole("link", { name: "В ITSM" })).toHaveAttribute(
+    "href",
+    "https://itsm.example/incidents/INC000000000003",
+  );
 
   const local = await openApp();
   await openDashboard(page, local);
-  await card(page, "У координаторов", "INC000000000003").getByRole("button", { name: "Детали" }).click();
-  await expect(page.getByText("Ссылка ITSM не настроена")).toBeVisible();
-  await expect(page.getByRole("link", { name: "В ITSM" })).toHaveCount(0);
+  const localCard = card(page, "У координаторов", "INC000000000003");
+  const localHref = "/itsm/incidents/INC000000000003";
+  await expect(localCard.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", localHref);
+  await expect(localCard.getByRole("link", { name: "В ITSM" })).toHaveAttribute("target", "_blank");
+  await localCard.getByRole("button", { name: "Детали" }).click();
+  await expect(page.getByRole("dialog").getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", localHref);
+  await expect(page.getByText("Ссылка ITSM не настроена")).toHaveCount(0);
 });
 
 test("A9 сохраняет последний снимок при битом и отсутствующем файле", async ({ page }) => {

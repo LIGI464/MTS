@@ -1,6 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { workLinks } from "./nav";
 import styles from "./shell.module.css";
 
 export function NavigationDialog({
@@ -27,7 +28,10 @@ export function NavigationDialog({
       <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.overlay} />
-        <Dialog.Content className={variant === "sheet" ? styles.sheet : styles.panel}>
+        <Dialog.Content
+          className={variant === "sheet" ? styles.sheet : styles.panel}
+          data-surface="surface"
+        >
           <div className={styles.panelHead}>
             <Dialog.Title className={styles.panelTitle}>{title}</Dialog.Title>
             <Dialog.Close className={styles.close}>
@@ -36,7 +40,16 @@ export function NavigationDialog({
             </Dialog.Close>
           </div>
           <Dialog.Description className={styles.description}>{description}</Dialog.Description>
-          {children}
+          <div className={styles.mega}>
+            <nav className={styles.rail} aria-label="Разделы пульта">
+              {workLinks.map((link) => (
+                <a key={link.href} href={link.href}>
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+            <div>{children}</div>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

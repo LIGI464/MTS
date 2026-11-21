@@ -57,6 +57,7 @@ export function DemoControls({
         <input
           type="password"
           autoComplete="off"
+          aria-invalid={resetState.phase === "error" ? true : undefined}
           value={operatorToken ?? ""}
           onChange={(event) => onOperatorToken(event.target.value.length > 0 ? event.target.value : undefined)}
         />
@@ -81,7 +82,7 @@ export function DemoControls({
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className={styles.overlay} />
-              <Dialog.Content className={styles.confirm}>
+              <Dialog.Content className={styles.confirm} data-surface="surface">
                 <Dialog.Title className={styles.confirmTitle}>Сбросить демо</Dialog.Title>
                 <Dialog.Description className={styles.confirmText}>
                   Сервер вернёт демонстрационный набор к исходной копии.
@@ -99,7 +100,14 @@ export function DemoControls({
           </Dialog.Root>
         ) : null}
       </div>
-      {resetState.message ? <p className={styles.message}>{resetState.message}</p> : null}
+      {resetState.message ? (
+        <p
+          className={resetState.phase === "error" ? styles.messageError : styles.message}
+          role={resetState.phase === "error" ? "alert" : "status"}
+        >
+          {resetState.message}
+        </p>
+      ) : null}
     </details>
   );
 }

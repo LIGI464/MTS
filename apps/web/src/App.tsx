@@ -2,7 +2,7 @@ import type { Notice, Snapshot } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useRef, useState } from "react";
 import { AnalysisPanel } from "./analysis";
-import { IncidentBoard } from "./board";
+import { IncidentBoard, itsmHref } from "./board";
 import { useDashboard, type DemoStep } from "./data";
 import { DemoControls } from "./demo";
 import { AppShell } from "./shell";
@@ -58,6 +58,7 @@ export function App() {
 
   return (
     <AppShell
+      title="Пульт координатора"
       healthBadge={<span className="health-text">{badgeText(dashboard.connection, snapshot)}</span>}
       footerSlot={
         <>
@@ -122,11 +123,11 @@ export function App() {
       <Dialog.Root open={selected !== null} onOpenChange={(open) => { if (!open) closeDetails(); }}>
         <Dialog.Portal>
           <Dialog.Overlay className="overlay" />
-          <Dialog.Content className="detail">
+          <Dialog.Content className="detail" data-surface="surface">
             {selected ? (
               <>
                 <Dialog.Title>{selected.title}</Dialog.Title>
-                <Dialog.Description className="detail-id">{selected.id}</Dialog.Description>
+                <Dialog.Description className="detail-id" data-numeric="tabular">{selected.id}</Dialog.Description>
                 <div className="tabs" role="tablist" aria-label="Панель инцидента">
                   <button type="button" role="tab" aria-selected={tab === "card"} onClick={() => setTab("card")}>
                     Карточка
@@ -144,13 +145,9 @@ export function App() {
                   </p>
                   <p>Команда: {selected.team ?? "Группа не назначена"}</p>
                   <p>{selected.summary ?? "Описание не указано"}</p>
-                  {selected.itsmUrl ? (
-                    <a href={selected.itsmUrl} target="_blank" rel="noopener noreferrer">
-                      В ITSM
-                    </a>
-                  ) : (
-                    <p>Ссылка ITSM не настроена</p>
-                  )}
+                  <a className="detail-itsm" href={itsmHref(selected)} target="_blank" rel="noopener noreferrer">
+                    В ITSM
+                  </a>
                   <AnalysisPanel
                     incident={selected}
                     runAnalysis={dashboard.runAnalysis}
