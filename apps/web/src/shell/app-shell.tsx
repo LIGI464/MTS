@@ -5,7 +5,7 @@ import { ProjectLink } from "./navigation";
 import styles from "./shell.module.css";
 
 const sections = [
-  { label: "Пульт", href: "/admin/incidents", icon: "grid-1x2" },
+  { label: "Дашборд", href: "/admin/incidents", icon: "grid-1x2" },
   { label: "Реестр ITSM", href: "/itsm/incidents", icon: "clipboard-data" },
   { label: "Разработчикам", href: "/admin/developers", icon: "code-slash" },
 ] satisfies Array<{ label: string; href: string; icon: IconName }>;
@@ -16,7 +16,7 @@ export function AppShell({
   footerSlot,
   headerActions,
   titleActions,
-  title = "Пульт координатора",
+  title = "Goida-board",
 }: {
   children: ReactNode;
   healthBadge?: ReactNode;

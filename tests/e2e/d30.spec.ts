@@ -44,7 +44,7 @@ test("D30 обслуживает прямые маршруты и 24/44 запи
     }
 
     for (const [path, heading, current] of [
-      [dashboard, "Пульт координатора", "Пульт"],
+      [dashboard, "Goida-board", "Дашборд"],
       [developer, "Разработчикам", "Разработчикам"],
       [listing, "Реестр обращений", "Реестр ITSM"],
       [ticketPath(id), title, "Реестр ITSM"],
@@ -329,7 +329,7 @@ test("D30 импортирует через живой D24 после конфл
 
 async function openBoard(page: Page, app: RunningApp) {
   await page.goto(app.url + dashboard, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Пульт координатора" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goida-board" })).toBeVisible();
   await expect(page.getByText("Данные актуальны", { exact: true })).toBeVisible();
 }
 

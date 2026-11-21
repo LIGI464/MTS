@@ -36,7 +36,7 @@ test.afterAll(async () => {
 
 async function board(page: Page) {
   await page.goto(`${app.url}${DASHBOARD}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Пульт координатора" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goida-board" })).toBeVisible();
 }
 
 const launcher = (page: Page) => page.getByRole("button", { name: /Помощник МТС/ });

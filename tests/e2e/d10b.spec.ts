@@ -26,7 +26,7 @@ async function stopCurrent(): Promise<void> {
 
 async function openDashboard(page: Page, app: RunningApp): Promise<void> {
   await page.goto(`${app.url}/admin/incidents`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1, name: "Пульт координатора" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Goida-board" })).toBeVisible();
 }
 
 function group(page: Page, name: string) {

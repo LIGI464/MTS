@@ -27,7 +27,7 @@ async function stopCurrent(): Promise<void> {
 
 async function openDashboard(page: Page, app: RunningApp, path = "/admin/incidents"): Promise<void> {
   await page.goto(`${app.url}${path}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1, name: "Пульт координатора" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Goida-board" })).toBeVisible();
   await expect(page.getByText("Данные актуальны")).toBeVisible();
 }
 
@@ -286,7 +286,7 @@ test("A13 сохраняет рабочую навигацию и служебн
 
   const navigation = page.getByRole("navigation", { name: "Разделы проекта" });
   await expect(navigation.getByRole("link")).toHaveCount(3);
-  const dashboard = navigation.getByRole("link", { name: "Пульт", exact: true });
+  const dashboard = navigation.getByRole("link", { name: "Дашборд", exact: true });
   await expect(dashboard).toHaveAttribute("aria-current", "page");
   await expect(navigation.getByRole("link", { name: "Реестр ITSM" })).toHaveAttribute("href", "/itsm/incidents");
   await expect(navigation.getByRole("link", { name: "Разработчикам" })).toHaveAttribute("href", "/admin/developers");

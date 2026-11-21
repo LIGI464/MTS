@@ -21,7 +21,7 @@ export async function openService(page: Page) {
 }
 
 export async function returnToBoard(page: Page) {
-  await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Пульт", exact: true }).click();
+  await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Дашборд", exact: true }).click();
 }
 
 const tracked = new Set<ChildProcess>();

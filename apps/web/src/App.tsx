@@ -79,7 +79,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
 
   return (
     <AppShell
-      title="Пульт координатора"
+      title="Goida-board"
       headerActions={
         <>
           <ActivityPanel events={activity.events} unreadCount={activity.journalUnread.size} markRead={activity.markJournalRead}

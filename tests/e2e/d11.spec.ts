@@ -24,7 +24,7 @@ async function stopCurrent(): Promise<void> {
 
 async function openDashboard(page: Page, app: RunningApp): Promise<void> {
   await page.goto(`${app.url}/admin/incidents`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1, name: "Пульт координатора" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Goida-board" })).toBeVisible();
 }
 
 test("D11 показывает пульт, навигацию проекта и общий адрес ITSM", async ({ page }, testInfo) => {
@@ -32,7 +32,7 @@ test("D11 показывает пульт, навигацию проекта и 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openDashboard(page, app);
 
-  await expect(page.getByRole("link", { name: "Пульт", exact: true }).first()).toHaveAttribute("href", "/admin/incidents");
+  await expect(page.getByRole("link", { name: "Дашборд", exact: true }).first()).toHaveAttribute("href", "/admin/incidents");
   await expect(page.getByRole("link", { name: "Реестр ITSM" }).first()).toHaveAttribute("href", "/itsm/incidents");
   await expect(page.getByRole("link", { name: "Разработчикам" }).first()).toHaveAttribute("href", "/admin/developers");
 
