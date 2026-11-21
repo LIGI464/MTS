@@ -65,6 +65,10 @@ export function prepareItsmArchive(database: DatabaseSync) {
     SELECT i.id AS incidentId, h.fingerprint, h.raw, h.ticket FROM itsm_incidents i
     JOIN itsm_history h ON h.seq = i.latest_seq WHERE h.present = 1 ORDER BY i.id
   `);
+  const presentFingerprints = database.prepare(`
+    SELECT i.id, h.fingerprint FROM itsm_incidents i
+    JOIN itsm_history h ON h.seq = i.latest_seq WHERE h.present = 1
+  `);
   const currentVersion = database.prepare(`
     SELECT h.version, h.present FROM itsm_incidents i JOIN itsm_history h ON h.seq = i.latest_seq WHERE i.id = ?
   `);
@@ -97,6 +101,10 @@ export function prepareItsmArchive(database: DatabaseSync) {
   }
 
   return {
+    getPresentFingerprints(): Map<string, string> {
+      const rows = presentFingerprints.all() as { id: string; fingerprint: string }[];
+      return new Map(rows.map(({ id, fingerprint }) => [id, fingerprint]));
+    },
     listPresentRaw(): RawIncidentFields[] {
       return (presentRows.all() as RecordData[]).map(({ raw }) => JSON.parse(raw) as RawIncidentFields);
     },

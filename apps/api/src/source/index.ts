@@ -1,14 +1,25 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { CoordinatorList, MutationResult, Notice, Snapshot } from "@mts/contracts";
+import type { CoordinatorList, ImportApplyRequest, ImportApplyResult, MutationResult, Notice, Snapshot } from "@mts/contracts";
 import { buildGroups, diffNotices } from "../domain/index.js";
 import { MutationError, planMutation, requireTicketVersion, type ItsmCommand } from "../itsm/mutation.js";
 import type { DashboardRuntime, DashboardRuntimeOptions } from "../runtime-contract.js";
 import { openDashboardStore, type DashboardMutation } from "../store/index.js";
 import { inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory } from "./coordinators.js";
 import { atomicWrite, isMissingFile } from "./file.js";
+import { createImportPreviews } from "./import.js";
 import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
+
+type LiveFile = { bytes: Buffer; digest: string } | { bytes: null; digest: null };
+
+function requestIdConflict(): MutationError {
+  return new MutationError(409, "REQUEST_ID_CONFLICT", "Этот requestId уже использован для другого действия.");
+}
+
+function revisionConflict(): MutationError {
+  return new MutationError(409, "REVISION_CONFLICT", "Набор изменился. Выполните предпросмотр заново.");
+}
 
 export async function createDashboardRuntime(options: DashboardRuntimeOptions): Promise<DashboardRuntime> {
   await mkdir(options.dataDir, { recursive: true });
@@ -16,6 +27,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   const livePath = join(options.dataDir, LIVE_FILENAME);
   const store = openDashboardStore(join(options.dataDir, "dashboard.sqlite"));
   const listeners = new Set<(snapshot: Snapshot) => void>();
+  const importPreviews = createImportPreviews();
 
   let persisted: ReturnType<typeof store.load>;
   let coordinators: CoordinatorList;
@@ -71,8 +83,8 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   function accept(
     source: NormalizedIncidents,
     digest: string,
-    { reset = false, mutation }: { reset?: boolean; mutation?: DashboardMutation } = {},
-  ): MutationResult | undefined {
+    { reset = false, mutation, importRequestId }: { reset?: boolean; mutation?: DashboardMutation; importRequestId?: string } = {},
+  ) {
     const directory = configuredDirectory ?? inferCoordinatorDirectory(source.records.map(({ raw }) => raw));
     const assignments = store.getCoordinatorAssignments();
     if (mutation?.coordinator) assignments.set(mutation.id, mutation.coordinator);
@@ -90,6 +102,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
       refreshSource: snapshot.source.status !== "ok",
       reset,
       mutation,
+      importRequestId,
     });
     acceptedDigest = digest;
     coordinators = directory;
@@ -99,10 +112,19 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     descriptions = new Map(data.descriptions);
     snapshot = { ...snapshot, revision, notices, incidents: data.incidents, groups, source: { status: "ok", lastGoodAt: at } };
     publish();
-    return saved.mutation;
+    return saved;
   }
 
   function acceptCurrent(data: NormalizedIncidents, digest: string): void {
+    const pendingImport = store.imports.getPending();
+    if (pendingImport) {
+      // Match the complete uploaded file before recovering a receipt for its replacement.
+      if (digest === pendingImport.targetDigest) {
+        accept(data, digest, { importRequestId: pendingImport.requestId });
+        return;
+      }
+      store.imports.discard(pendingImport.requestId);
+    }
     const pending = store.mutations.getPending();
     if (pending) {
       // A restart may find the replacement plus later edits to unrelated rows.
@@ -139,11 +161,18 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   }
 
   function completedMutation(requestId: string, commandFingerprint: string): MutationResult | undefined {
+    if (store.imports.getCompleted(requestId)) throw requestIdConflict();
     const prior = store.mutations.getCompleted(requestId);
     if (!prior) return undefined;
-    if (prior.fingerprint !== commandFingerprint) {
-      throw new MutationError(409, "REQUEST_ID_CONFLICT", "Этот requestId уже использован для другого действия.");
-    }
+    if (prior.fingerprint !== commandFingerprint) throw requestIdConflict();
+    return prior.result;
+  }
+
+  function completedImport(requestId: string, commandFingerprint: string): ImportApplyResult | undefined {
+    if (store.mutations.getCompleted(requestId)) throw requestIdConflict();
+    const prior = store.imports.getCompleted(requestId);
+    if (!prior) return undefined;
+    if (prior.fingerprint !== commandFingerprint) throw requestIdConflict();
     return prior.result;
   }
 
@@ -159,10 +188,58 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     throw new MutationError(409, "SOURCE_UNAVAILABLE", "Рабочий файл отсутствует, повреждён или недоступен.");
   }
 
-  async function requireSourceDigest(expected: string): Promise<void> {
-    const bytes = await readFile(livePath).catch(() => null);
-    if (bytes === null || sha256(bytes) !== expected) {
-      throw new MutationError(409, "SOURCE_CHANGED", "Рабочий файл изменился. Перечитайте карточку и повторите действие.");
+  function readOptionalLiveFile(): Promise<Buffer | null> {
+    return readFile(livePath).catch((error: unknown) => {
+      if (isMissingFile(error)) return null;
+      throw error;
+    });
+  }
+
+  async function requireSourceDigest(expected: string | null): Promise<void> {
+    try {
+      const bytes = await readOptionalLiveFile();
+      if ((bytes === null ? null : sha256(bytes)) === expected) return;
+    } catch {
+      // A file that cannot be read cannot be safely replaced either.
+    }
+    throw new MutationError(409, "SOURCE_CHANGED", "Рабочий файл изменился. Перечитайте данные и повторите действие.");
+  }
+
+  async function replaceLiveFile(
+    bytes: Buffer,
+    data: NormalizedIncidents,
+    digest: string,
+    previous: LiveFile,
+    operation: { mutation: DashboardMutation } | { importRequestId: string },
+  ) {
+    const discard = "mutation" in operation
+      ? () => store.mutations.discard(operation.mutation.requestId)
+      : () => store.imports.discard(operation.importRequestId);
+    try {
+      await atomicWrite(livePath, bytes, () => requireSourceDigest(previous.digest));
+    } catch (error) {
+      discard();
+      throw error;
+    }
+
+    try {
+      const saved = accept(data, digest, operation);
+      failedResetDigest = undefined;
+      return saved;
+    } catch (error) {
+      try {
+        if (previous.bytes === null) {
+          await requireSourceDigest(digest);
+          await rm(livePath);
+        } else {
+          await atomicWrite(livePath, previous.bytes, () => requireSourceDigest(digest));
+        }
+        discard();
+      } catch {
+        // The next valid read can settle the pending operation if rollback was interrupted.
+        markSourceFailed();
+      }
+      throw error;
     }
   }
 
@@ -188,7 +265,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
       await requireSourceDigest(current.digest);
       const result = accept(current.data, current.digest, { mutation: {
         requestId, fingerprint: commandFingerprint, id: command.id, targetFingerprint: target.fingerprint, coordinator,
-      } });
+      } })?.mutation;
       if (!result) throw new Error("Результат операции отсутствует.");
       return result;
     }
@@ -201,28 +278,68 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     const digest = sha256(updated);
     const pending = { requestId, fingerprint: commandFingerprint, id, targetFingerprint: target.fingerprint };
     store.mutations.begin(pending);
-    try {
-      await atomicWrite(livePath, updated, () => requireSourceDigest(current.digest));
-    } catch (error) {
-      store.mutations.discard(requestId);
-      throw error;
-    }
-
-    let result: MutationResult | undefined;
-    try {
-      result = accept(data, digest, { mutation: pending });
-    } catch (error) {
-      try {
-        await atomicWrite(livePath, current.bytes, () => requireSourceDigest(digest));
-        store.mutations.discard(requestId);
-      } catch {
-        // If rollback is interrupted, a valid file will settle the pending operation on the next read.
-        markSourceFailed();
-      }
-      throw error;
-    }
+    const result = (await replaceLiveFile(updated, data, digest, current, { mutation: pending }))?.mutation;
     if (!result) throw new Error("Результат операции отсутствует.");
     return result;
+  }
+
+  async function refreshImportBase(): Promise<LiveFile> {
+    let bytes: Buffer | null;
+    try {
+      bytes = await readOptionalLiveFile();
+    } catch {
+      markSourceFailed();
+      throw new MutationError(409, "SOURCE_UNAVAILABLE", "Рабочий файл недоступен.");
+    }
+    const file: LiveFile = bytes === null ? { bytes: null, digest: null } : { bytes, digest: sha256(bytes) };
+    pendingDigest = undefined;
+    if (file.bytes !== null && file.digest !== failedResetDigest) {
+      let data: NormalizedIncidents | undefined;
+      try {
+        data = normalizeIncidents(file.bytes, options.itsmTemplate);
+      } catch (error) {
+        if (!(error instanceof InvalidIncidentFile || error instanceof RangeError)) throw error;
+      }
+      if (data) {
+        acceptCurrent(data, file.digest);
+        return file;
+      }
+    }
+    // A valid import can restore a missing or malformed live file from the last accepted revision.
+    markSourceFailed();
+    return file;
+  }
+
+  async function applyImport(command: ImportApplyRequest): Promise<ImportApplyResult> {
+    const { requestId: suppliedId, ...intent } = command;
+    const requestId = suppliedId.toLowerCase();
+    const commandFingerprint = fingerprint(intent);
+    const prior = completedImport(requestId, commandFingerprint);
+    if (prior) return prior;
+
+    const previous = await refreshImportBase();
+    const recovered = completedImport(requestId, commandFingerprint);
+    if (recovered) return recovered;
+
+    if (command.expectedRevision !== snapshot.revision) throw revisionConflict();
+    const preview = importPreviews.get(command.previewId);
+    if (!preview) throw new MutationError(409, "PREVIEW_UNAVAILABLE", "Предпросмотр недоступен. Выполните его заново.");
+    if (command.expectedRevision !== preview.revision) throw revisionConflict();
+
+    const { bytes } = preview;
+    const data = normalizeIncidents(bytes, options.itsmTemplate);
+    const digest = sha256(bytes);
+    // Any pending replacement left after a malformed or missing source cannot be verified.
+    const pendingImport = store.imports.getPending();
+    if (pendingImport) store.imports.discard(pendingImport.requestId);
+    const pendingMutation = store.mutations.getPending();
+    if (pendingMutation) store.mutations.discard(pendingMutation.requestId);
+
+    store.imports.begin({ requestId, fingerprint: commandFingerprint, targetDigest: digest });
+    const saved = await replaceLiveFile(bytes, data, digest, previous, { importRequestId: requestId });
+    if (!saved) throw new Error("Результат импорта отсутствует.");
+    importPreviews.delete(command.previewId);
+    return { revision: saved.revision };
   }
 
   function enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -257,6 +374,14 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
       if (closed) throw new Error("Источник уже остановлен.");
       return enqueue(() => applyMutation(command));
     },
+    previewImport({ jsonText }) {
+      if (closed) throw new Error("Источник уже остановлен.");
+      return importPreviews.create(jsonText, snapshot.revision, store.getPresentFingerprints);
+    },
+    async applyImport(command) {
+      if (closed) throw new Error("Источник уже остановлен.");
+      return enqueue(() => applyImport(command));
+    },
     subscribe(listener) {
       if (closed) return () => {};
       listeners.add(listener);
@@ -268,12 +393,9 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
       return enqueue(async () => {
         const data = normalizeIncidents(input, options.itsmTemplate);
         const digest = sha256(input);
-        const previous = await readFile(livePath).catch((error: unknown) => {
-          if (isMissingFile(error)) return null;
-          throw error;
-        });
+        const previous = await readOptionalLiveFile();
 
-        if (previous && store.mutations.getPending()) {
+        if (previous && (store.mutations.getPending() || store.imports.getPending())) {
           const previousDigest = sha256(previous);
           if (previousDigest !== failedResetDigest) {
             try {

@@ -17,21 +17,48 @@ const statesByLabel = new Map<string, Exclude<State, "Other">>(
 export const LIVE_FILENAME = "character_problems.json";
 export const BASELINE_FILENAME = "baseline.json";
 
+export function countExportRows(rows: readonly unknown[]) {
+  const byPriority = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || !("priorityId" in row)) continue;
+    const { priorityId } = row;
+    if (priorityId === 1 || priorityId === 2 || priorityId === 3 || priorityId === 4) byPriority[priorityId]++;
+  }
+  return { total: rows.length, byPriority };
+}
+
 export class InvalidIncidentFile extends Error {
-  constructor() {
+  readonly counts: ReturnType<typeof countExportRows>;
+
+  constructor(readonly errors: string[], rows: readonly unknown[] = []) {
     super("Файл должен содержать валидный массив инцидентов с уникальными ID.");
+    this.counts = countExportRows(rows);
   }
 }
 
 function parseIncidentBytes(bytes: Uint8Array): { raw: RawIncidentFields[]; normalized: RawIncident[] } {
+  let raw: unknown;
   try {
-    const raw: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    const parsed = RawIncidentsSchema.safeParse(raw);
-    if (parsed.success) return { raw: raw as RawIncidentFields[], normalized: parsed.data };
+    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
-    // Raw input may contain private data. Keep parse diagnostics out of errors and logs.
+    throw new InvalidIncidentFile(["Файл не содержит корректный JSON."]);
   }
-  throw new InvalidIncidentFile();
+  if (!Array.isArray(raw)) throw new InvalidIncidentFile(["В файле ожидается массив заявок."]);
+
+  const parsed = RawIncidentsSchema.safeParse(raw);
+  if (parsed.success) return { raw: raw as RawIncidentFields[], normalized: parsed.data };
+
+  // Show field locations without exposing values from the upload or the JSON parser's source excerpts.
+  const issues = parsed.error.issues;
+  const errors = issues.slice(0, 20).map(({ path, code }) => {
+    const [index, field] = path;
+    const location = typeof index === "number" ? `Запись ${index + 1}` : "Файл";
+    if (typeof field !== "string") return `${location}: ожидается объект заявки.`;
+    const reason = field === "id" && code === "custom" ? "ID уже встречался в файле" : "некорректное значение";
+    return `${location}, поле ${field}: ${reason}.`;
+  });
+  if (issues.length > errors.length) errors.push(`Всего ошибок: ${issues.length}.`);
+  throw new InvalidIncidentFile(errors, raw);
 }
 
 export function readIncidentBytes(bytes: Uint8Array): RawIncident[] {

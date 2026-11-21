@@ -1,4 +1,7 @@
-import type { CoordinatorList, FullTicketDetail, MutationResult, Snapshot, TicketList } from "@mts/contracts";
+import type {
+  CoordinatorList, FullTicketDetail, ImportApplyRequest, ImportApplyResult, ImportPreviewRequest, ImportPreviewResult,
+  MutationResult, Snapshot, TicketList,
+} from "@mts/contracts";
 import type { ItsmCommand } from "./itsm/mutation.js";
 
 export type DashboardRuntimeOptions = {
@@ -15,6 +18,8 @@ export type DashboardRuntime = {
   listTickets(): TicketList;
   getTicket(id: string): FullTicketDetail | null;
   mutate(command: ItsmCommand): Promise<MutationResult>;
+  previewImport(command: ImportPreviewRequest): ImportPreviewResult;
+  applyImport(command: ImportApplyRequest): Promise<ImportApplyResult>;
   subscribe(listener: (snapshot: Snapshot) => void): () => void;
   resetTo(bytes: Uint8Array): Promise<Snapshot>;
   close(): Promise<void>;

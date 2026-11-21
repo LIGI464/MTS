@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { IncidentSchema, NoticeSchema, type Coordinator, type Incident, type MutationResult, type Notice } from "@mts/contracts";
 import type { SourceRecord } from "../source/input.js";
+import { prepareImportJournal } from "./imports.js";
 import { prepareItsmArchive } from "./itsm.js";
 import { prepareMutationJournal, type PendingMutation } from "./mutations.js";
 
@@ -15,7 +16,13 @@ export type StoredDashboard = {
 type PendingNotice = Omit<Notice, "seq">;
 type DashboardState = Omit<StoredDashboard, "notices"> & { records: readonly SourceRecord[] };
 export type DashboardMutation = PendingMutation & { coordinator?: Coordinator };
-type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean; mutation?: DashboardMutation };
+type SaveOptions = {
+  dashboardChanged?: boolean;
+  refreshSource?: boolean;
+  reset?: boolean;
+  mutation?: DashboardMutation;
+  importRequestId?: string;
+};
 type SaveResult = Pick<StoredDashboard, "revision" | "notices"> & { mutation?: MutationResult };
 
 export type DashboardStore = {
@@ -24,9 +31,11 @@ export type DashboardStore = {
   listTickets: ReturnType<typeof prepareItsmArchive>["listTickets"];
   getTicket: ReturnType<typeof prepareItsmArchive>["getTicket"];
   getTicketVersion: ReturnType<typeof prepareItsmArchive>["getVersion"];
+  getPresentFingerprints: ReturnType<typeof prepareItsmArchive>["getPresentFingerprints"];
   listPresentRaw: ReturnType<typeof prepareItsmArchive>["listPresentRaw"];
   getCoordinatorAssignments: ReturnType<typeof prepareItsmArchive>["getCoordinatorAssignments"];
   mutations: Omit<ReturnType<typeof prepareMutationJournal>, "finish">;
+  imports: Omit<ReturnType<typeof prepareImportJournal>, "finish">;
   close(): void;
 };
 
@@ -56,6 +65,7 @@ export function openDashboardStore(path: string): DashboardStore {
     `);
     const archive = prepareItsmArchive(database);
     const mutations = prepareMutationJournal(database);
+    const imports = prepareImportJournal(database);
     const dashboard = database.prepare(`
       SELECT revision, last_good_at AS lastGoodAt, incidents, descriptions
       FROM dashboard WHERE singleton = 1
@@ -119,7 +129,7 @@ export function openDashboardStore(path: string): DashboardStore {
           };
         });
       },
-      save(state, events, { dashboardChanged, refreshSource, reset, mutation }) {
+      save(state, events, { dashboardChanged, refreshSource, reset, mutation, importRequestId }) {
         return transaction("BEGIN IMMEDIATE", () => {
           const { lastGoodAt, incidents, descriptions, records } = state;
           if (mutation?.coordinator) {
@@ -129,7 +139,7 @@ export function openDashboardStore(path: string): DashboardStore {
           }
           const archiveChanged = archive.sync(records, lastGoodAt);
           const changed = Boolean(dashboardChanged || archiveChanged || reset);
-          if (!changed && !refreshSource && !mutation) return null;
+          if (!changed && !refreshSource && !mutation && !importRequestId) return null;
 
           const revision = state.revision + Number(changed);
           writeDashboard.run(revision, lastGoodAt, JSON.stringify(incidents), JSON.stringify(descriptions));
@@ -145,9 +155,12 @@ export function openDashboardStore(path: string): DashboardStore {
             result.mutation = { id: mutation.id, version: ticket.version, revision };
             mutations.finish(mutation.requestId, result.mutation);
           }
+          if (importRequestId) imports.finish(importRequestId, revision);
           if (reset) {
             const pending = mutations.getPending();
             if (pending) mutations.discard(pending.requestId);
+            const pendingImport = imports.getPending();
+            if (pendingImport) imports.discard(pendingImport.requestId);
           }
           return result;
         });
@@ -155,9 +168,11 @@ export function openDashboardStore(path: string): DashboardStore {
       listTickets: archive.listTickets,
       getTicket: archive.getTicket,
       getTicketVersion: archive.getVersion,
+      getPresentFingerprints: archive.getPresentFingerprints,
       listPresentRaw: archive.listPresentRaw,
       getCoordinatorAssignments: archive.getCoordinatorAssignments,
       mutations,
+      imports,
       close() {
         database.close();
       },

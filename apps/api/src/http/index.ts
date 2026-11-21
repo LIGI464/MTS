@@ -9,6 +9,7 @@ import { registerItsmRoutes } from "../itsm/index.js";
 import { MutationError } from "../itsm/mutation.js";
 import type { RouteContext } from "../runtime-contract.js";
 import { registerEvents } from "./events.js";
+import { registerImportRoutes } from "./import.js";
 
 const NOT_FOUND = { code: "NOT_FOUND", message: "Маршрут не найден." } satisfies ApiError;
 
@@ -30,15 +31,19 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
   registerDemoRoutes(app, context);
   registerAnalysisRoutes(app, context);
   registerItsmRoutes(app, context);
+  registerImportRoutes(app, context);
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof MutationError) {
       return reply.code(error.status).send({ code: error.code, message: error.message } satisfies ApiError);
     }
     const status = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number"
       ? error.statusCode : 500;
     if (status === 413) {
-      const response: ApiError = { code: "BODY_TOO_LARGE", message: "Размер запроса превышает 8 КиБ." };
+      const response: ApiError = {
+        code: "BODY_TOO_LARGE",
+        message: `Размер запроса превышает ${request.routeOptions.bodyLimit / 1024} КиБ.`,
+      };
       return reply.code(413).send(response);
     }
     if (status >= 400 && status < 500) {
