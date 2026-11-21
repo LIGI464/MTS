@@ -1,11 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { startDashboard, type RunningApp } from "./support/harness.js";
 
 const GROUPS = ["Критические", "У координаторов", "Высокий приоритет", "Исследование"] as const;
 const LOCAL_ID = "INC000000000003";
-const SHOTS = join("D:\\MTS", "d11-screenshots");
 
 test.afterEach(async () => {
   await stopCurrent();
@@ -30,9 +27,8 @@ async function openDashboard(page: Page, app: RunningApp): Promise<void> {
   await expect(page.getByRole("heading", { level: 1, name: "Пульт координатора" })).toBeVisible();
 }
 
-test("D11 показывает пульт, меню и общий адрес ITSM", async ({ page }) => {
+test("D11 показывает пульт, навигацию проекта и общий адрес ITSM", async ({ page }, testInfo) => {
   const app = await openApp();
-  await mkdir(SHOTS, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await openDashboard(page, app);
 
@@ -49,7 +45,7 @@ test("D11 показывает пульт, меню и общий адрес ITS
       await expect(region.locator("article").first()).toBeInViewport();
     }
   }
-  await page.screenshot({ path: join(SHOTS, "pult-1440x900.png") });
+  await page.screenshot({ path: testInfo.outputPath("pult-1440x900.png") });
 
   const card = page.getByRole("region", { name: "У координаторов", exact: true }).locator("article").filter({ hasText: LOCAL_ID });
   const href = "/itsm/incidents/INC000000000003";
@@ -64,13 +60,8 @@ test("D11 показывает пульт, меню и общий адрес ITS
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
-  const menu = page.getByRole("button", { name: "Частным лицам", exact: true });
-  await menu.click();
-  await expect(page.getByRole("heading", { name: "Частным лицам" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Реестр ITSM" }).first()).toBeVisible();
-  await page.screenshot({ path: join(SHOTS, "menu-1440x900.png") });
-  await page.keyboard.press("Escape");
-  await expect(menu).toBeFocused();
+  await expect(card.getByRole("button", { name: "Детали" })).toBeFocused();
+  await expect(page.getByRole("navigation", { name: "Разделы проекта" })).toBeVisible();
 
   for (const size of [
     { width: 1280, height: 720 },

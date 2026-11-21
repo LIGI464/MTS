@@ -1,13 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { startDashboard, type RunningApp } from "./support/harness.js";
 
 const GROUPS = ["Критические", "У координаторов", "Высокий приоритет", "Исследование"] as const;
 const HIGH_ID = "INC000000000001";
 const LONG_TITLE =
   "ДлинноеНазваниеИнцидентаБезПробеловКотороеДолжноПереноситьсяВнутриКарточкиИОставатьсяЧитаемымНаУзкомЭкране";
-const SHOTS = join("D:\\MTS", "d10b-screenshots");
 
 test.afterEach(async () => {
   await stopCurrent();
@@ -36,9 +33,8 @@ function group(page: Page, name: string) {
   return page.getByRole("region", { name, exact: true });
 }
 
-test("D10B читает очереди, SLA, пустую очередь и перенос названия", async ({ page }) => {
+test("D10B читает очереди, SLA, пустую очередь и перенос названия", async ({ page }, testInfo) => {
   const app = await openApp();
-  await mkdir(SHOTS, { recursive: true });
   const sizes = [
     { width: 1440, height: 900, shot: "pult-1440x900.png" },
     { width: 1280, height: 720, shot: null },
@@ -67,7 +63,7 @@ test("D10B читает очереди, SLA, пустую очередь и пе
     expect(overflow).toBeLessThanOrEqual(1);
 
     if (size.shot) {
-      await page.screenshot({ path: join(SHOTS, size.shot), fullPage: false });
+      await page.screenshot({ path: testInfo.outputPath(size.shot), fullPage: false });
     }
 
     const title = incident.getByRole("button", { name: "Задержка обновления статусов заказов" });

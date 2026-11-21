@@ -83,6 +83,14 @@
   --space-section: 16px;
   --space-card: 12px;
   --motion: 140ms;
+  --panel-motion: 200ms;
+  --content-width: 1440px;
+  --critical-soft: #fff0f2;
+  --warning-soft: #fff4db;
+  --success-soft: #e9f8ef;
+  --info: #345186;
+  --info-soft: #eef2fb;
+  --button-hover: #bc0027;
   --heading-size: 32px;
   --queue-size: 20px;
   --incident-size: 16px;
@@ -197,5 +205,6 @@ button.brand-action:disabled {
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion: 0ms;
+    --panel-motion: 0ms;
   }
 }

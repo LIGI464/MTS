@@ -265,36 +265,33 @@ test("две страницы видят одну атомарную правк�
   }
 });
 
-test("A13 открывает шторки, футер, мобильные разделы и клавиатуру", async ({ page }) => {
+test("A13 сохраняет рабочую навигацию и служебные действия на телефоне", async ({ page }) => {
   const app = await openApp();
+  await page.setViewportSize({ width: 390, height: 844 });
   await openDashboard(page, app);
 
-  const audience = page.getByRole("button", { name: "Частным лицам", exact: true });
-  await audience.click();
-  await expect(page.getByRole("heading", { name: "Частным лицам" })).toBeVisible();
-  await expect(page.getByText("Демо", { exact: true }).first()).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(audience).toBeFocused();
+  const navigation = page.getByRole("navigation", { name: "Разделы проекта" });
+  await expect(navigation.getByRole("link")).toHaveCount(3);
+  const dashboard = navigation.getByRole("link", { name: "Пульт", exact: true });
+  await expect(dashboard).toHaveAttribute("aria-current", "page");
+  await expect(navigation.getByRole("link", { name: "Реестр ITSM" })).toHaveAttribute("href", "/itsm/incidents");
+  await expect(navigation.getByRole("link", { name: "Разработчикам" })).toHaveAttribute("href", "/admin/developers");
+  await dashboard.focus();
   await page.keyboard.press("Tab");
-  await expect(audience).not.toBeFocused();
+  await expect(navigation.getByRole("link", { name: "Реестр ITSM" })).toBeFocused();
 
-  const footer = page.locator("footer");
-  await footer.getByRole("button", { name: "Связь и дом", exact: true }).click();
-  await expect(footer.getByText("Домашний интернет")).toBeVisible();
-  await expect(footer.getByText("Демо").first()).toBeVisible();
-  await footer.getByRole("button", { name: "О проекте", exact: true }).click();
-  const showcase = footer.getByRole("link", { name: "Публичная витрина" });
-  await expect(showcase).toHaveAttribute("href", "https://rnd.mts.ru/personal");
-  await expect(showcase).toHaveAttribute("target", "_blank");
+  const footer = page.getByRole("contentinfo");
+  await expect(footer.getByText("goida-code · Кейс МТС")).toBeVisible();
+  await expect(footer.getByRole("link")).toHaveCount(0);
+  await footer.getByText("Служебное", { exact: true }).click();
+  await expect(footer.getByLabel("Токен оператора")).toBeVisible();
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  const sections = page.getByRole("button", { name: "Разделы", exact: true });
-  await expect(sections).toBeVisible();
-  await sections.click();
-  await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
-  await expect(page.getByText("Условия использования")).toBeVisible();
+  const details = card(page, "Высокий приоритет", HIGH_ID).getByRole("button", { name: "Детали" });
+  await details.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(sections).toBeFocused();
+  await expect(details).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
 function analysis(page: Page): Locator {
