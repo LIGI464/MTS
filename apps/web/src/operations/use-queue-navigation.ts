@@ -6,7 +6,13 @@ import { queueId, type QueueCategory, type QueueMembers } from "./queue-summary"
 export type QueueLocation = { category: QueueCategory; id: string };
 export type QueueTarget = QueueLocation & { attentionKey: string | null };
 export type SlaCategory = "near" | "overdue";
-type Request = { serial: number; category: QueueCategory; resetSequence: number };
+type ExactDestination = {
+  id: string;
+  version: string;
+  onArrival: (target: QueueTarget) => void;
+  onUnavailable: () => void;
+};
+type Request = { serial: number; category: QueueCategory; resetSequence: number; destination?: ExactDestination };
 
 const closedSla = { near: false, overdue: false };
 
@@ -39,10 +45,10 @@ export function useQueueNavigation(
     setExpandedSla(closedSla);
   }, [cancel, resetSequence]);
 
-  function jump(category: QueueCategory) {
+  function jump(category: QueueCategory, destination?: ExactDestination) {
     cancel();
     if (isSla(category)) setExpandedSla({ near: category === "near", overdue: category === "overdue" });
-    setRequest({ serial: serial.current, category, resetSequence });
+    setRequest({ serial: serial.current, category, resetSequence, destination });
   }
 
   function toggleSla(category: SlaCategory) {
@@ -52,10 +58,14 @@ export function useQueueNavigation(
 
   const active = request?.resetSequence === resetSequence ? request : null;
   const category = active?.category;
+  const destination = active?.destination;
+  const members = category ? full[category] : [];
+  const exact = destination && members.find((entry) => entry.id === destination.id && entry.version === destination.version);
   const next = category && pending.find((entry) =>
-    entry.categories.includes(category) && full[category].some(({ id }) => id === entry.incidentId),
+    entry.categories.includes(category) && (destination ? entry.incidentId === exact?.id :
+      members.some(({ id }) => id === entry.incidentId)),
   );
-  const id = category ? (next ? next.incidentId : full[category][0]?.id) : undefined;
+  const id = destination ? exact?.id : (next ? next.incidentId : members[0]?.id);
   const attentionKey = next ? next.key : null;
   const target = category && id ? { category, id } : null;
   const locations = new Map(revealed);
@@ -86,7 +96,8 @@ export function useQueueNavigation(
     const card = id ? region.querySelector<HTMLElement>(`[data-incident-id="${CSS.escape(id)}"]`) : null;
     const title = card?.querySelector<HTMLElement>("[data-card-title]");
     if (!id || !title) {
-      focusHeading();
+      if (destination) destination.onUnavailable();
+      else focusHeading();
       setRequest(null);
       return;
     }
@@ -112,7 +123,11 @@ export function useQueueNavigation(
         const location = { category, id };
         const key = keyOf(location);
         if (needsReveal) setRevealed((previous) => new Map(previous).set(key, location));
-        setSelected((previous) => new Map(previous).set(key, { ...location, attentionKey }));
+        const current = { ...location, attentionKey };
+        setSelected((previous) => new Map(previous).set(key, current));
+        destination?.onArrival(current);
+      } else if (destination) {
+        destination.onUnavailable();
       } else {
         focusHeading();
       }
@@ -121,7 +136,7 @@ export function useQueueNavigation(
 
     frame = requestAnimationFrame(check);
     return () => cancelAnimationFrame(frame);
-  }, [active, category, id, attentionKey, needsReveal]);
+  }, [active, category, id, attentionKey, needsReveal, destination]);
 
   const inspect = useCallback((target: QueueTarget) => {
     setSelected((previous) => {

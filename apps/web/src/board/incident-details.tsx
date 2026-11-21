@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { AnalysisPanel } from "../analysis";
 import { detailQuery, type IncidentClient } from "../data/incidents";
 import { Icon } from "../icons";
+import type { ChosenRecommendation } from "../operations/priority-feed";
 import { CoordinatorValue } from "./coordinator";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
@@ -37,7 +38,7 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, onShown, onClose, onReturnFocus }: {
+export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, recommendation, onShown, onClose, onReturnFocus }: {
   id: string;
   incident: Incident | undefined;
   nowMs: number;
@@ -45,6 +46,7 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
   revision?: number;
   operatorToken?: string;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
+  recommendation?: ChosenRecommendation;
   onShown: () => void;
   onClose: () => void;
   onReturnFocus: () => void;
@@ -72,6 +74,12 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
             </div>
             <Dialog.Close className="detail-close" aria-label="Закрыть"><Icon name="x-lg" size={21} /></Dialog.Close>
           </div>
+          {recommendation ? (
+            <section className={styles.recommendation} aria-label="Обоснование рекомендации">
+              <strong>{recommendation.source === "llm" ? "Приоритет ИИ" : "Локальные правила"} · {recommendation.entry.rank} в ленте</strong>
+              <p>{recommendation.entry.reason}</p>
+            </section>
+          ) : null}
           {sla ? (
             <p className="detail-sla" data-tone={sla.tone} data-numeric="tabular" title={sla.hint}>
               <span>SLA</span><strong>{sla.status}</strong>{sla.duration ? <span>{sla.duration}</span> : null}

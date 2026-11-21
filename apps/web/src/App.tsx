@@ -1,4 +1,6 @@
-import type { Snapshot } from "@mts/contracts";
+import {
+  matchesPriorityRecommendation, priorityQueueMembership, type Snapshot,
+} from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IncidentBoard } from "./board";
@@ -9,6 +11,7 @@ import { coordinatorQuery } from "./data/incidents";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
+import { PriorityFeed, type ChosenRecommendation } from "./operations/priority-feed";
 import { buildQueues, DEFAULT_FILTERS, QUEUE_LABELS, SUMMARY_SEGMENTS, PRIMARY_QUEUES, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
 import { useQueueNavigation, type QueueTarget } from "./operations/use-queue-navigation";
@@ -30,9 +33,11 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   activity: ReturnType<typeof useIncidentAlerts>;
   sound: ReturnType<typeof useIncidentSound>;
 }) {
-  const [selection, setSelection] = useState<{ id: string; attentionKey: string | null; target?: QueueTarget } | null>(null);
+  const [selection, setSelection] = useState<{
+    id: string; attentionKey: string | null; target?: QueueTarget; recommendation?: ChosenRecommendation;
+  } | null>(null);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<{ node: HTMLElement | null; fromFeed: boolean } | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
   const groups = snapshot?.groups ?? EMPTY_GROUPS;
@@ -53,9 +58,25 @@ export function App({ dashboard, operatorToken, activity, sound }: {
     setFilters(DEFAULT_FILTERS);
   }, [resetSequence]);
 
-  function select(id: string, attentionKey: string | null, target?: QueueTarget) {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setSelection({ id, attentionKey, target });
+  function select(
+    id: string, attentionKey: string | null, target?: QueueTarget,
+    recommendation?: ChosenRecommendation, source?: HTMLElement,
+  ) {
+    const node = source ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    opener.current = { node, fromFeed: Boolean(recommendation) };
+    setSelection({ id, attentionKey, target, recommendation });
+  }
+
+  function chooseRecommendation(recommendation: ChosenRecommendation, source: HTMLButtonElement) {
+    const { entry } = recommendation;
+    if (!snapshot || !matchesPriorityRecommendation(entry, incidents.find(({ id }) => id === entry.incidentId),
+      priorityQueueMembership(snapshot.groups), dashboard.nowMs)) return;
+    navigation.jump(entry.target, {
+      id: entry.incidentId,
+      version: entry.incidentVersion,
+      onArrival: (target) => select(target.id, target.attentionKey, target, recommendation, source),
+      onUnavailable: () => focusFeed(source),
+    });
   }
 
   const detailOpened = useCallback(() => {
@@ -66,7 +87,8 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   function returnFocus() {
     const target = opener.current;
     opener.current = null;
-    if (target?.isConnected) target.focus({ preventScroll: true });
+    if (target?.fromFeed) focusFeed(target.node);
+    else if (target?.node?.isConnected) target.node.focus({ preventScroll: true });
     else document.getElementById("incident-search")?.focus({ preventScroll: true });
   }
 
@@ -109,6 +131,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       {snapshot ? (
         <>
           <DashboardMetrics queues={summary} pending={activity.pending} onJump={navigation.jump} />
+          <PriorityFeed data={dashboard.priorityFeed} nowMs={dashboard.nowMs} onChoose={chooseRecommendation} />
           <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
             <div className={operationsStyles.queueHeader}>
               <h2 id="queue-heading">Очереди инцидентов</h2>
@@ -141,7 +164,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       {selection ? (
         <IncidentDetails key={selection.id} id={selection.id} incident={selected}
           nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision} operatorToken={operatorToken}
-          runAnalysis={dashboard.runAnalysis} onShown={detailOpened}
+          runAnalysis={dashboard.runAnalysis} recommendation={selection.recommendation} onShown={detailOpened}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
     </AppShell>
@@ -158,4 +181,9 @@ function badgeText(
   if (snapshot?.source.status === "stale") return "Источник устарел";
   if (connection === "live") return "Данные актуальны";
   return "Данные загружаются";
+}
+
+function focusFeed(source: HTMLElement | null) {
+  const target = source?.isConnected ? source : document.getElementById("priority-feed-heading");
+  target?.focus();
 }
