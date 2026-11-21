@@ -73,7 +73,7 @@ export function incidentState(raw: RawIncident): State {
   return label ? statesByLabel.get(label) ?? "Other" : "Other";
 }
 
-function itsmUrl(template: string | undefined, raw: RawIncident): string | null {
+export function itsmUrl(template: string | undefined, raw: Pick<RawIncident, "id" | "sysId">): string | null {
   if (!template || !/\{(?:id|sysId)\}/.test(template)) return null;
   if (template.includes("{sysId}") && !raw.sysId?.trim()) return null;
   try {

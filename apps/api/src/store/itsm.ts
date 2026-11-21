@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { FullTicketDetail, HistoryEntry, RawIncidentFields, TicketList, TicketSummary } from "@mts/contracts";
+import { MAX_MATCH_TEXT_LENGTH, type ArchiveMatchTicket } from "../assistant/matches.js";
 import type { CoordinatorProjection } from "../source/coordinators.js";
 import type { SourceRecord } from "../source/input.js";
 
@@ -15,6 +16,7 @@ type HistoryRow = {
   ticket: string;
 };
 type SummaryRow = Pick<HistoryRow, "version" | "present" | "ticket">;
+type SearchRow = Omit<ArchiveMatchTicket, "present"> & { present: HistoryRow["present"] };
 
 function displayText(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -32,6 +34,10 @@ function projectTicket({ incident, raw }: SourceRecord): StoredTicket {
 function readSummary(row: SummaryRow): TicketSummary {
   const ticket = JSON.parse(row.ticket) as StoredTicket;
   return { ...ticket, version: row.version, present: row.present === 1 };
+}
+
+function readSearchTicket(row: SearchRow): ArchiveMatchTicket {
+  return { ...row, present: row.present === 1 };
 }
 
 export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: CoordinatorProjection) {
@@ -67,6 +73,24 @@ export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: C
   `);
   const currentVersion = database.prepare(`
     SELECT h.version, h.present FROM itsm_incidents i JOIN itsm_history h ON h.seq = i.latest_seq WHERE i.id = ?
+  `);
+  const searchProjection = `
+    SELECT i.id, h.version, h.present,
+      substr(json_extract(h.ticket, '$.title'), 1, ${MAX_MATCH_TEXT_LENGTH}) AS title,
+      substr(json_extract(h.ticket, '$.product'), 1, ${MAX_MATCH_TEXT_LENGTH}) AS product,
+      substr(json_extract(h.ticket, '$.service'), 1, ${MAX_MATCH_TEXT_LENGTH}) AS service,
+      json_extract(h.ticket, '$.state') AS state,
+      json_extract(h.ticket, '$.resolvedAt') AS resolvedAt,
+      substr(json_extract(h.raw, '$.shortDescription'), 1, ${MAX_MATCH_TEXT_LENGTH}) AS shortDescription,
+      substr(json_extract(h.raw, '$.description'), 1, ${MAX_MATCH_TEXT_LENGTH}) AS description,
+      CASE WHEN json_type(h.raw, '$.solution') = 'text'
+        THEN substr(json_extract(h.raw, '$.solution'), 1, ${MAX_MATCH_TEXT_LENGTH}) END AS solution,
+      json_extract(h.raw, '$.sysId') AS sysId
+    FROM itsm_incidents i JOIN itsm_history h ON h.seq = i.latest_seq
+  `;
+  const searchTicket = database.prepare(`${searchProjection} WHERE i.id = ?`);
+  const completedSearchTickets = database.prepare(`
+    ${searchProjection} WHERE json_extract(h.ticket, '$.state') IN ('Resolved', 'Closed')
   `);
   const historyRows = database.prepare(`
     SELECT version, at, present, raw, ticket FROM itsm_history
@@ -121,6 +145,13 @@ export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: C
       return { items: (currentRows.all() as (SummaryRow & Pick<HistoryRow, "raw">)[]).map((row) => ({
         ...readSummary(row), coordinator: projectCoordinator(JSON.parse(row.raw) as RawIncidentFields),
       })) };
+    },
+    getSearchTicket(id: string): ArchiveMatchTicket | null {
+      const row = searchTicket.get(id) as SearchRow | undefined;
+      return row ? readSearchTicket(row) : null;
+    },
+    *completedSearchTickets(): IterableIterator<ArchiveMatchTicket> {
+      for (const row of completedSearchTickets.iterate() as Iterable<SearchRow>) yield readSearchTicket(row);
     },
     getVersion(id: string): { version: string; present: boolean } | null {
       const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;

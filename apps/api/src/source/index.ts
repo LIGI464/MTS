@@ -2,6 +2,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { CoordinatorList, ImportApplyRequest, ImportApplyResult, MutationResult, Notice, Snapshot } from "@mts/contracts";
+import { findSimilarIncidents } from "../assistant/matches.js";
 import { buildGroups, diffNotices } from "../domain/index.js";
 import { MutationError, planMutation, type ItsmCommand } from "../itsm/mutation.js";
 import type { DashboardRuntime, DashboardRuntimeOptions } from "../runtime-contract.js";
@@ -10,7 +11,7 @@ import type { PendingMutation } from "../store/mutations.js";
 import { createCoordinatorProjection, inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory } from "./coordinators.js";
 import { atomicWrite, isMissingFile } from "./file.js";
 import { createImportPreviews } from "./import.js";
-import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
+import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, itsmUrl, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
 
 type LiveFile = { bytes: Buffer; digest: string } | { bytes: null; digest: null };
 
@@ -356,6 +357,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     listCoordinators: () => coordinators,
     listTickets: store.listTickets,
     getTicket: store.getTicket,
+    findSimilarIncidents: (query) => findSimilarIncidents(store, query, (ticket) => itsmUrl(options.itsmTemplate, ticket)),
     async mutate(command) {
       if (closed) throw new Error("Источник уже остановлен.");
       return enqueue(() => applyMutation(command));
