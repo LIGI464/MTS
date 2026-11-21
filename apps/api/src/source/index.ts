@@ -8,7 +8,9 @@ import { MutationError, planMutation, type ItsmCommand } from "../itsm/mutation.
 import type { DashboardRuntime, DashboardRuntimeOptions } from "../runtime-contract.js";
 import { openDashboardStore } from "../store/index.js";
 import type { PendingMutation } from "../store/mutations.js";
-import { createCoordinatorProjection, inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory } from "./coordinators.js";
+import {
+  createCoordinatorProjection, ensureCoordinatorFile, inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory,
+} from "./coordinators.js";
 import { atomicWrite, isMissingFile } from "./file.js";
 import { createImportPreviews } from "./import.js";
 import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, itsmUrl, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
@@ -36,7 +38,9 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   let coordinators: CoordinatorList;
   try {
     persisted = store.load();
-    coordinators = configuredDirectory ?? inferCoordinatorDirectory(store.getPresentRaw().values());
+    await ensureCoordinatorFile(options.dataDir, store.getPresentRaw().values());
+    const directory = (await readCoordinatorDirectory(options.dataDir)) ?? configuredDirectory;
+    coordinators = directory ?? inferCoordinatorDirectory(store.getPresentRaw().values());
   } catch (error) {
     store.close();
     throw error;

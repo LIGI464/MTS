@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, rename, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { REPO_ROOT } from "../http/config.js";
 import { atomicWrite, isMissingFile, stageWrite } from "../source/file.js";
+import { ensureCoordinatorFile } from "../source/coordinators.js";
 import { BASELINE_FILENAME, LIVE_FILENAME, readIncidentBytes } from "../source/input.js";
 
 const fixtureAnchor = Date.parse("2025-01-01T12:00:00.000Z");
@@ -59,5 +60,7 @@ export async function ensureDemoData(dataDir: string): Promise<void> {
     deadline: raw.deadline ? shift(raw.deadline) : raw.deadline,
     completionDate: raw.completionDate ? shift(raw.completionDate) : raw.completionDate,
   }));
-  await writeDemoFiles(dataDir, Buffer.from(JSON.stringify(records, null, 2) + "\n"));
+  const bytes = Buffer.from(JSON.stringify(records, null, 2) + "\n");
+  await writeDemoFiles(dataDir, bytes);
+  await ensureCoordinatorFile(dataDir, records as import("@mts/contracts").RawIncidentFields[]);
 }

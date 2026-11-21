@@ -1,7 +1,8 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { COORDINATOR_TEAM, CoordinatorListSchema, type Coordinator, type RawIncidentFields } from "@mts/contracts";
-import { isMissingFile } from "./file.js";
+import { atomicWrite, isMissingFile } from "./file.js";
 import { sha256, type NormalizedIncidents } from "./input.js";
 
 function exportedName(raw: RawIncidentFields): string | undefined {
@@ -20,6 +21,15 @@ export function inferCoordinatorDirectory(rows: Iterable<RawIncidentFields>): Co
     if (name) names.add(name);
   }
   return [...names].sort().map(exportedCoordinator);
+}
+
+export async function ensureCoordinatorFile(dataDir: string, rows: Iterable<RawIncidentFields>): Promise<boolean> {
+  const path = join(dataDir, "coordinators.json");
+  if (existsSync(path)) return false;
+  const directory = inferCoordinatorDirectory(rows);
+  if (directory.length === 0) return false;
+  await atomicWrite(path, Buffer.from(JSON.stringify(directory, null, 2) + "\n"));
+  return true;
 }
 
 export async function readCoordinatorDirectory(dataDir: string): Promise<Coordinator[] | undefined> {
