@@ -91,7 +91,7 @@ export function createIncidentFixtures(nowMs: number) {
     current = SnapshotSchema.parse({
       ...current, serverNow, revision: current.revision + 1,
       incidents: nextIncidents, groups: fixtureGroups(nextIncidents),
-      notices: notice ? [...current.notices, { ...notice, seq: ++seq, at: serverNow }].slice(-50) : current.notices,
+      notices: notice ? [...current.notices, { ...notice, seq: ++seq, at: serverNow, revision: current.revision + 1 }].slice(-50) : current.notices,
     });
     details.set(incident.id, makeDetail(incident, details.get(incident.id)));
     return current;
@@ -136,7 +136,7 @@ export function createIncidentFixtures(nowMs: number) {
       incidents: initial.incidents.map((incident) => ({
         ...incident, version: `fixture-${incident.id}-${current.revision + 1}`,
       })),
-      notices: [{ seq: ++seq, kind: "demo.reset", incidentId: null, title: "Набор восстановлен", at: serverNow }],
+      notices: [{ seq: ++seq, revision: current.revision + 1, kind: "demo.reset", incidentId: null, title: "Набор восстановлен", at: serverNow }],
     };
     for (const incident of current.incidents) details.set(incident.id, makeDetail(incident, details.get(incident.id)));
     return current;

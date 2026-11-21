@@ -59,9 +59,15 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
         kind TEXT NOT NULL,
         incident_id TEXT,
         title TEXT,
-        at TEXT NOT NULL
+        at TEXT NOT NULL,
+        revision INTEGER
       ) STRICT;
     `);
+    transaction("BEGIN IMMEDIATE", () => {
+      if (!database.prepare("PRAGMA table_info(notices)").all().some(({ name }) => name === "revision")) {
+        database.exec("ALTER TABLE notices ADD COLUMN revision INTEGER");
+      }
+    });
     const archive = prepareItsmArchive(database, projectCoordinator);
     const mutations = prepareMutationJournal(database);
     const imports = prepareImportJournal(database);
@@ -79,11 +85,11 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
         descriptions = excluded.descriptions
     `);
     const appendNotice = database.prepare(`
-      INSERT INTO notices (kind, incident_id, title, at) VALUES (?, ?, ?, ?)
+      INSERT INTO notices (kind, incident_id, title, at, revision) VALUES (?, ?, ?, ?, ?)
     `);
     const readNotices = database.prepare(`
-      SELECT seq, kind, incident_id AS incidentId, title, at FROM (
-        SELECT seq, kind, incident_id, title, at FROM notices ORDER BY seq DESC LIMIT 50
+      SELECT seq, kind, incident_id AS incidentId, title, at, revision FROM (
+        SELECT seq, kind, incident_id, title, at, revision FROM notices ORDER BY seq DESC LIMIT 50
       ) ORDER BY seq
     `);
     const trimNotices = database.prepare(`
@@ -91,6 +97,12 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
     `);
     const noticeList = NoticeSchema.array();
     const incidentList = IncidentSchema.array();
+
+    function recentNotices() {
+      return noticeList.parse(readNotices.all().map(({ revision, ...notice }) =>
+        revision === null ? notice : { ...notice, revision },
+      ));
+    }
 
     function transaction<T>(begin: "BEGIN" | "BEGIN IMMEDIATE", operation: () => T): T {
       database.exec(begin);
@@ -127,7 +139,7 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
               ...incident, coordinator: projectCoordinator(raw.get(incident.id)),
             })),
             descriptions: entries,
-            notices: noticeList.parse(readNotices.all()),
+            notices: recentNotices(),
           };
         });
       },
@@ -142,10 +154,10 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
           writeDashboard.run(revision, lastGoodAt, JSON.stringify(incidents), JSON.stringify(descriptions));
           if (reset) database.exec("DELETE FROM notices");
           for (const { kind, incidentId, title, at } of events) {
-            appendNotice.run(kind, incidentId, title, at);
+            appendNotice.run(kind, incidentId, title, at, revision);
           }
           trimNotices.run();
-          const result: SaveResult = { revision, notices: noticeList.parse(readNotices.all()) };
+          const result: SaveResult = { revision, notices: recentNotices() };
           if (mutation) {
             const ticket = archive.getVersion(mutation.id);
             if (!ticket?.present) throw new Error("Заявка отсутствует в принятом снимке.");

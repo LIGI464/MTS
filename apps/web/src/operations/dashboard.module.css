@@ -60,7 +60,60 @@
 .summaryCard:hover { border-color: var(--muted); }
 .summaryCard[data-category="critical"][data-unread="true"] {
   border-color: var(--brand);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--brand) 32%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--brand) 35%, transparent);
+  animation: critical-attention 1300ms ease-in-out infinite alternate;
+}
+
+@keyframes critical-attention {
+  from { box-shadow: 0 0 6px color-mix(in srgb, var(--brand) 25%, transparent); }
+  to { box-shadow: 0 0 20px color-mix(in srgb, var(--brand) 52%, transparent); }
+}
+
+.summaryDot {
+  position: absolute;
+  inset-block-start: 20px;
+  inset-inline-end: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: summary-dot 1100ms ease-in-out infinite alternate;
+}
+
+.summaryCard .summaryDot {
+  inset-block-start: 22px;
+  inset-inline-end: 22px;
+  width: 11px;
+  height: 11px;
+}
+
+@keyframes summary-dot {
+  from { opacity: .5; }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 9px color-mix(in srgb, var(--brand) 76%, transparent);
+  }
+}
+
+.summaryValues {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 9px;
+}
+
+.unreadCount {
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: var(--critical-soft);
+  color: var(--critical);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summaryCard[data-category="critical"][data-unread="true"],
+  .summaryDot { animation: none; }
 }
 
 .summaryLabel {
@@ -190,15 +243,6 @@
   border-bottom: 0;
 }
 
-.event[data-fresh="true"] {
-  animation: event-appear 280ms ease-out both;
-}
-
-@keyframes event-appear {
-  from { opacity: .45; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .eventInfo {
   display: grid;
   gap: 4px;
@@ -276,10 +320,6 @@
 .eventInfo p {
   margin: 0;
   font-size: 14px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .event[data-fresh="true"] { animation: none; }
 }
 
 .queueHeader {
@@ -431,6 +471,7 @@
   .summaryStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summarySegment { padding: 10px 18px 10px 9px; }
   .summarySegment .summaryLabel { font-size: 14px; }
+  .summarySegment .summaryDot { inset-block-start: 13px; inset-inline-end: 8px; }
   .summarySegment strong { font-size: 25px; }
   .summarySegment:nth-child(n)::before { display: none; }
   .summarySegment:nth-child(even)::before { display: block; }

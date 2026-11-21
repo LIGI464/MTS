@@ -1,30 +1,28 @@
-import type { Notice, Snapshot } from "@mts/contracts";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { activityEvents, createActivityState, updateActivity } from "./activity";
+import type { Snapshot } from "@mts/contracts";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { attentionByQueue, createActivityState, updateActivity, viewAttention, type ActivityState } from "./activity";
 
-const HIGHLIGHT_MS = 2500;
+type Action =
+  | { type: "snapshot"; snapshot: Snapshot; nowMs: number }
+  | { type: "view"; key: string }
+  | { type: "read-journal" };
 
-export function useIncidentAlerts(snapshot: Snapshot | null, liveNotices: readonly Notice[]) {
-  const [activity, accept] = useReducer(
-    (state: ReturnType<typeof createActivityState>, input: { snapshot: Snapshot; liveNotices: readonly Notice[] } | "read") =>
-      input === "read" ? { ...state, unread: new Set<string>() } : updateActivity(state, input.snapshot, input.liveNotices),
-    undefined,
-    createActivityState,
-  );
-  const [expired, setExpired] = useState(0);
-  const alert = activity.alert;
+function reduce(state: ActivityState, action: Action): ActivityState {
+  switch (action.type) {
+    case "snapshot": return updateActivity(state, action.snapshot, action.nowMs);
+    case "view": return viewAttention(state, action.key);
+    case "read-journal": return { ...state, journalUnread: new Set() };
+  }
+}
 
+export function useIncidentAlerts(snapshot: Snapshot | null, nowMs: number) {
+  const [activity, dispatch] = useReducer(reduce, undefined, createActivityState);
   useEffect(() => {
-    if (snapshot) accept({ snapshot, liveNotices });
-  }, [snapshot, liveNotices]);
+    if (snapshot) dispatch({ type: "snapshot", snapshot, nowMs });
+  }, [snapshot, nowMs]);
 
-  useEffect(() => {
-    if (!alert) return;
-    const timeout = window.setTimeout(() => setExpired(alert.sequence), HIGHLIGHT_MS);
-    return () => window.clearTimeout(timeout);
-  }, [alert]);
-
-  const events = useMemo(() => activityEvents(activity), [activity]);
-  const markRead = useCallback(() => accept("read"), []);
-  return { events, alert, unreadCount: activity.unread.size, markRead, highlight: alert && alert.sequence !== expired ? alert : null };
+  const queues = useMemo(() => attentionByQueue(activity.pending), [activity.pending]);
+  const markJournalRead = useCallback(() => dispatch({ type: "read-journal" }), []);
+  const markViewed = useCallback((key: string) => dispatch({ type: "view", key }), []);
+  return { ...activity, queues, markJournalRead, markViewed };
 }

@@ -1,6 +1,6 @@
 import type { Notice, Snapshot } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IncidentBoard } from "./board";
 import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
@@ -10,9 +10,9 @@ import { Icon } from "./icons";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
-import { buildQueues, DEFAULT_FILTERS, queueId, SUMMARY_SEGMENTS, PRIMARY_QUEUES,
-  type QueueCategory, type QueueFilters } from "./operations/queue-summary";
+import { buildQueues, DEFAULT_FILTERS, QUEUE_LABELS, SUMMARY_SEGMENTS, PRIMARY_QUEUES, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
+import { useQueueNavigation } from "./operations/use-queue-navigation";
 import type { useIncidentAlerts } from "./operations/use-incident-alerts";
 import type { useIncidentSound } from "./operations/use-incident-sound";
 import operationsStyles from "./operations/dashboard.module.css";
@@ -31,32 +31,37 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   activity: ReturnType<typeof useIncidentAlerts>;
   sound: ReturnType<typeof useIncidentSound>;
 }) {
-  const [selection, setSelection] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ id: string; attentionKey?: string } | null>(null);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
   const groups = snapshot?.groups ?? EMPTY_GROUPS;
   const coordinatorIds = useMemo(() => new Set(groups.coordinator), [groups.coordinator]);
-  const selected = incidents.find(({ id }) => id === selection);
+  const selected = incidents.find(({ id }) => id === selection?.id);
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, coordinatorIds, dashboard.incidentClient, snapshot?.revision);
   const summary = buildQueues(incidents, groups, dashboard.nowMs);
   const queues = buildQueues(filtered.incidents, groups, dashboard.nowMs, filters.status !== "default" && filters.status !== "active");
   const countsDiffer = [...PRIMARY_QUEUES, ...SUMMARY_SEGMENTS].some((category) => summary[category].length !== queues[category].length);
-  const { events, highlight, unreadCount, markRead } = activity;
-  const resetSeq = dashboard.newNotices.findLast((notice) => notice.kind === "demo.reset")?.seq;
+  const { markViewed, resetSequence } = activity;
+  const navigation = useQueueNavigation(queues, summary, activity.pending, resetSequence, markViewed);
 
   useEffect(() => {
-    if (resetSeq === undefined) return;
+    if (resetSequence < 0) return;
     setSelection(null);
     setFilters(DEFAULT_FILTERS);
-  }, [resetSeq]);
+  }, [resetSequence]);
 
-  function select(id: string) {
+  function select(id: string, key?: string | null) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setSelection(id);
+    const guessed = key === undefined ? activity.pending.find((entry) => entry.incidentId === id)?.key : key;
+    setSelection({ id, attentionKey: guessed ?? undefined });
   }
+
+  const detailOpened = useCallback(() => {
+    if (selection?.attentionKey) markViewed(selection.attentionKey);
+  }, [selection, markViewed]);
 
   function returnFocus() {
     const target = opener.current;
@@ -66,14 +71,8 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   }
 
   function changeFilters(patch: Partial<QueueFilters>) {
+    navigation.cancel();
     setFilters((previous) => ({ ...previous, ...patch }));
-  }
-
-  function jumpToQueue(category: QueueCategory) {
-    const target = document.getElementById(queueId(category));
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    target?.focus({ preventScroll: true });
-    target?.scrollIntoView({ block: "start", behavior: reducedMotion ? "instant" : "smooth" });
   }
 
   return (
@@ -81,9 +80,9 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       title="Пульт координатора"
       headerActions={
         <>
-          <ActivityPanel events={events} unreadCount={unreadCount} highlight={highlight} markRead={markRead}
-            onInspect={select}>
-            <EventsButton count={unreadCount} />
+          <ActivityPanel events={activity.events} unreadCount={activity.journalUnread.size} markRead={activity.markJournalRead}
+            onInspect={(id, eventKey) => select(id, activity.pending.find((entry) => entry.eventKeys.includes(eventKey))?.key ?? null)}>
+            <EventsButton count={activity.journalUnread.size} />
           </ActivityPanel>
           <SoundButton {...sound} />
         </>
@@ -105,9 +104,6 @@ export function App({ dashboard, operatorToken, activity, sound }: {
         <p className="banner" role="status">Показан последний сохранённый снимок. Источник устарел.</p>
       ) : null}
       {snapshot?.source.status === "unavailable" ? <p className="banner" role="status">Файл временно недоступен</p> : null}
-      <div className="sr-only" aria-live="polite">
-        {highlight ? `Новые инциденты: ${[...highlight.incidentIds].join(", ")}` : ""}
-      </div>
       {dashboard.newNotices.length > 0 ? (
         <div className="toasts" aria-label="Оповещения">
           {dashboard.newNotices.map((notice) => (
@@ -124,7 +120,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       {!snapshot && dashboard.connection !== "connecting" ? <p className="empty-screen">Нет данных</p> : null}
       {snapshot ? (
         <>
-          <DashboardMetrics queues={summary} onJump={jumpToQueue} />
+          <DashboardMetrics queues={summary} pending={activity.pending} onJump={navigation.jump} />
           <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
             <div className={operationsStyles.queueHeader}>
               <h2 id="queue-heading">Очереди инцидентов</h2>
@@ -140,15 +136,20 @@ export function App({ dashboard, operatorToken, activity, sound }: {
                 <button type="button" onClick={filtered.retry}>Повторить</button>
               </p>
             ) : null}
-            <IncidentBoard queues={queues} nowMs={dashboard.nowMs} highlight={highlight}
-              onInspect={select} />
+            {navigation.revealed ? (
+              <p className={operationsStyles.countNote} role="status">
+                Заявка {navigation.revealed.id} показана вне фильтров в очереди «{QUEUE_LABELS[navigation.revealed.category].label}».
+              </p>
+            ) : null}
+            <IncidentBoard queues={navigation.queues} nowMs={dashboard.nowMs} attention={activity.queues}
+              pulse={navigation.pulse} onPulseEnd={navigation.finishPulse} onInspect={select} />
           </section>
         </>
       ) : null}
       {selection ? (
-        <IncidentDetails key={selection} id={selection} incident={selected}
+        <IncidentDetails key={selection.id} id={selection.id} incident={selected}
           nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision} operatorToken={operatorToken}
-          runAnalysis={dashboard.runAnalysis}
+          runAnalysis={dashboard.runAnalysis} onShown={detailOpened}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
     </AppShell>

@@ -5,16 +5,18 @@ import { CoordinatorValue } from "./coordinator";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
 import { displayText, incidentCoordinator, PRIORITIES } from "./model";
-import type { IncidentAlert } from "../operations/activity";
+import type { IncidentAttention } from "../operations/activity";
 import { PRIMARY_QUEUES, PRIORITY_QUEUES, QUEUE_LABELS, SLA_QUEUES, queueId,
   type QueueCategory, type QueueMembers } from "../operations/queue-summary";
 import styles from "./board.module.css";
 
-export function IncidentBoard({ queues, nowMs, highlight, onInspect }: {
+export function IncidentBoard({ queues, nowMs, attention, pulse, onPulseEnd, onInspect }: {
   queues: QueueMembers;
   nowMs: number;
-  highlight?: IncidentAlert | null;
-  onInspect: (id: string) => void;
+  attention: ReadonlyMap<QueueCategory, ReadonlyMap<string, IncidentAttention>>;
+  pulse: { category: QueueCategory; id: string } | null;
+  onPulseEnd: () => void;
+  onInspect: (id: string, key?: string) => void;
 }) {
   function renderCards(category: QueueCategory) {
     const incidents = queues[category];
@@ -22,8 +24,9 @@ export function IncidentBoard({ queues, nowMs, highlight, onInspect }: {
       <div className={styles.cards}>
         {incidents.map((incident) => (
           <IncidentCard key={incident.id} incident={incident} nowMs={nowMs}
-            newSequence={highlight?.incidentIds.has(incident.id) ? highlight.sequence : undefined}
-            onInspect={onInspect} />
+            newSequence={attention.get(category)?.get(incident.id)?.key}
+            pulse={pulse?.category === category && pulse.id === incident.id}
+            onPulseEnd={onPulseEnd} onInspect={onInspect} />
         ))}
       </div>
     ) : (
@@ -89,12 +92,16 @@ function IncidentCard({
   incident,
   nowMs,
   newSequence,
+  pulse,
+  onPulseEnd,
   onInspect,
 }: {
   incident: Incident;
   nowMs: number;
-  newSequence?: number;
-  onInspect: (id: string) => void;
+  newSequence?: string;
+  pulse: boolean;
+  onPulseEnd: () => void;
+  onInspect: (id: string, key?: string) => void;
 }) {
   const priorityLabel = PRIORITIES.find(({ id }) => id === incident.priority)?.label;
   const coordinator = incidentCoordinator(incident);
@@ -102,7 +109,9 @@ function IncidentCard({
   const tone = sla.tone === "alert" ? styles.alert : sla.tone === "near" ? styles.near : styles.calm;
 
   return (
-    <article data-incident-id={incident.id} className={`${styles.card} ${tone}`} data-fresh={newSequence !== undefined ? "true" : undefined}>
+    <article data-incident-id={incident.id} className={`${styles.card} ${tone}`}
+      data-fresh={newSequence !== undefined || undefined} data-pulse={pulse || undefined}
+      onAnimationEnd={(event) => { if (pulse && event.target === event.currentTarget && !event.pseudoElement) onPulseEnd(); }}>
       <div className={styles.cardHeading}>
         <span className={styles.id} data-numeric="tabular">{incident.id}</span>
         <div className={styles.badges}>
@@ -114,7 +123,7 @@ function IncidentCard({
         </div>
       </div>
       <div className={styles.titleRow}>
-        <button type="button" className={styles.title} title={incident.title} onClick={() => onInspect(incident.id)}>
+        <button type="button" className={styles.title} title={incident.title} data-card-title onClick={() => onInspect(incident.id, newSequence)}>
           {incident.title}
         </button>
       </div>
@@ -141,7 +150,7 @@ function IncidentCard({
           <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
             В ITSM <Icon name="box-arrow-up-right" size={14} />
           </a>
-          <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id)}>
+          <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id, newSequence)}>
             Подробнее
           </button>
         </div>

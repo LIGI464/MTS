@@ -1,7 +1,7 @@
 import type { AnalysisResult, FullTicketDetail, Incident, RawIncidentFields } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { AnalysisPanel } from "../analysis";
 import { detailQuery, type IncidentClient } from "../data/incidents";
 import { Icon } from "../icons";
@@ -37,7 +37,7 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, onClose, onReturnFocus }: {
+export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, onShown, onClose, onReturnFocus }: {
   id: string;
   incident: Incident | undefined;
   nowMs: number;
@@ -45,6 +45,7 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
   revision?: number;
   operatorToken?: string;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
+  onShown: () => void;
   onClose: () => void;
   onReturnFocus: () => void;
 }) {
@@ -53,6 +54,10 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
   const known = record?.ticket ?? incident;
   const current = known ? incidentCoordinator(known) : null;
   const sla = incident ? presentSla(incident, nowMs) : null;
+  const hasDetails = Boolean(known);
+  useEffect(() => {
+    if (hasDetails) onShown();
+  }, [hasDetails, onShown]);
 
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>

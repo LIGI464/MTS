@@ -68,8 +68,8 @@ function DashboardRoutes({ developers, operatorToken, onOperatorToken }: {
   onOperatorToken: (token: string | undefined) => void;
 }) {
   const dashboard = useDashboard();
-  const activity = useIncidentAlerts(dashboard.snapshot, dashboard.newNotices);
-  const sound = useIncidentSound(activity.alert);
+  const activity = useIncidentAlerts(dashboard.snapshot, dashboard.nowMs);
+  const sound = useIncidentSound(activity.soundSequence);
   if (developers) return <DeveloperRoute dashboard={dashboard} operatorToken={operatorToken} onOperatorToken={onOperatorToken} />;
   return <App dashboard={dashboard} operatorToken={operatorToken} activity={activity} sound={sound} />;
 }

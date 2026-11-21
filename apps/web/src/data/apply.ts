@@ -32,7 +32,11 @@ export function applyFrame(state: ClientFrameState, incoming: Snapshot, origin: 
 
   const sawSse = state.sawSse || origin === "sse";
   if (origin === "reset") return applyReset(state, incoming, sawSse);
-  if (state.watermark === null) return baseline(state, incoming, sawSse);
+  const { watermark } = state;
+  if (watermark === null) return baseline(state, incoming, sawSse);
+  if (incoming.notices.some(({ seq, kind }) => kind === "demo.reset" && seq > watermark && !state.seen.includes(seq))) {
+    return applyReset(state, incoming, sawSse);
+  }
   return mergeFrame(state, incoming, sawSse);
 }
 

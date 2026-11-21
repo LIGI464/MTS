@@ -54,9 +54,19 @@ describe("SQLite dashboard store", () => {
     store = openDashboardStore(path);
     expect(store.load()).toEqual({ ...state, revision, notices });
     expect(store.save({ ...state, records, revision }, [reset], { reset: true })).toEqual({
-      revision: revision + 1, notices: [{ ...reset, seq: 511 }],
+      revision: revision + 1, notices: [{ ...reset, seq: 511, revision: revision + 1 }],
     });
     expect(database.prepare("SELECT COUNT(*) AS count FROM notices").get()?.count).toBe(1);
+  });
+
+  it("keeps legacy notice IDs and records the revision for new events", () => {
+    const accepted = store.save({ ...state, records }, [event], { dashboardChanged: true })!;
+    store.close();
+    database.exec("ALTER TABLE notices DROP COLUMN revision");
+    store = openDashboardStore(path);
+    expect(store.load()?.notices).toEqual([{ ...event, seq: 1 }]);
+    const next = store.save({ ...state, records, revision: accepted.revision }, [event], { dashboardChanged: true });
+    expect(next?.notices).toEqual([{ ...event, seq: 1 }, { ...event, seq: 2, revision: accepted.revision + 1 }]);
   });
 
   it("rolls back the snapshot and cleared journal when the reset notice cannot be stored", () => {
@@ -73,7 +83,7 @@ describe("SQLite dashboard store", () => {
 
     database.exec("DROP TRIGGER reject_reset");
     expect(store.save(next, [reset], { reset: true })).toEqual({
-      revision: accepted.revision + 1, notices: [{ ...reset, seq: 2 }],
+      revision: accepted.revision + 1, notices: [{ ...reset, seq: 2, revision: accepted.revision + 1 }],
     });
     expect(store.getTicket(event.incidentId!)?.history.map(({ present }) => present)).toEqual([false, true]);
   });

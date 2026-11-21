@@ -64,7 +64,7 @@ function parsePinnedEvent(raw: string | null): ActivityEvent | null {
       || (title !== null && typeof title !== "string") || typeof at !== "string"
       || !Number.isFinite(Date.parse(at))) return null;
 
-    if (kind === "incident.new") return { key, kind, incidentId, title, at };
+    if (kind === "incident.new" || kind === "sla.near" || kind === "sla.overdue") return { key, kind, incidentId, title, at };
     const noticeKind = NoticeKindSchema.safeParse(kind);
     return noticeKind.success ? { key, kind: noticeKind.data, incidentId, title, at } : null;
   } catch {

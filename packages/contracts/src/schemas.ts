@@ -130,6 +130,7 @@ export const IncidentSchema = z.strictObject({
 
 export const NoticeSchema = z.strictObject({
   seq: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative().optional(),
   kind: NoticeKindSchema,
   incidentId: z.string().nullable(),
   title: z.string().nullable(),

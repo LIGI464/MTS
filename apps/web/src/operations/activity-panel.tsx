@@ -2,7 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon, type IconName } from "../icons";
 import { eventIdentity, filterActivity, PIN_STORAGE_PREFIX, readPinnedEvents, storePin, type ActivityFilter } from "./activity-pins";
-import type { ActivityEvent, IncidentAlert } from "./activity";
+import type { ActivityEvent } from "./activity";
 import styles from "./dashboard.module.css";
 
 const eventTypes = {
@@ -11,6 +11,8 @@ const eventTypes = {
   "coordinator.assigned": { label: "Передан группе координаторов", icon: "people", tone: "info" },
   "coordinator.changed": { label: "Координатор изменён", icon: "people", tone: "info" },
   "critical.resolved": { label: "Критический инцидент решён", icon: "check-circle", tone: "success" },
+  "sla.near": { label: "Срок близко", icon: "alarm", tone: "warning" },
+  "sla.overdue": { label: "Срок просрочен", icon: "clock-history", tone: "warning" },
   "demo.reset": { label: "Набор восстановлен", icon: "arrow-counterclockwise", tone: "neutral" },
 } satisfies Record<ActivityEvent["kind"], { label: string; icon: IconName; tone: string }>;
 
@@ -18,12 +20,11 @@ const clock = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
 });
 
-export function ActivityPanel({ events, unreadCount, highlight, markRead, onInspect, children }: {
+export function ActivityPanel({ events, unreadCount, markRead, onInspect, children }: {
   events: readonly ActivityEvent[];
   unreadCount: number;
-  highlight: IncidentAlert | null;
   markRead: () => void;
-  onInspect: (id: string) => void;
+  onInspect: (id: string, eventKey: string) => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -89,7 +90,7 @@ export function ActivityPanel({ events, unreadCount, highlight, markRead, onInsp
                 const { icon, label, tone } = eventTypes[event.kind];
                 const id = event.incidentId;
                 return (
-                  <li key={key} className={styles.event} data-fresh={highlight?.eventKeys.has(event.key) || undefined}>
+                  <li key={key} className={styles.event}>
                     <span className={styles.symbol} data-tone={tone}><Icon name={icon} size={17} /></span>
                     <div className={styles.eventInfo}>
                       <div className={styles.eventTop}>
@@ -97,7 +98,7 @@ export function ActivityPanel({ events, unreadCount, highlight, markRead, onInsp
                         <time dateTime={event.at}>{clock.format(new Date(event.at))}</time>
                       </div>
                       {id ? (
-                        <button type="button" className={styles.eventLink} onClick={() => onInspect(id)}>
+                        <button type="button" className={styles.eventLink} onClick={() => onInspect(id, event.key)}>
                           {event.title && event.title !== label ? event.title : id}
                           <Icon name="box-arrow-up-right" size={14} />
                         </button>

@@ -239,7 +239,7 @@ describe("dashboard source runtime", () => {
     const reset = await second.resetTo(initial);
     expect(reset.revision).toBe(3);
     expect(reset.source.status).toBe("ok");
-    expect(reset.notices).toEqual([{ seq: previous.notices[0].seq + 1, kind: "demo.reset", at: now, incidentId: null, title: null }]);
+    expect(reset.notices).toEqual([{ seq: previous.notices[0].seq + 1, revision: reset.revision, kind: "demo.reset", at: now, incidentId: null, title: null }]);
     expect(await readFile(livePath)).toEqual(initial);
     expect(second.getDescription("a")).toBeNull();
 

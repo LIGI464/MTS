@@ -1,9 +1,9 @@
-import { COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
-import { expect, test } from "@playwright/test";
+import { API_PREFIX, COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
+import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { readLive, startDashboard, writeLive } from "./support/harness.js";
+import { OPERATOR_TOKEN, readLive, startDashboard, writeLive } from "./support/harness.js";
 
-test("лента и звук реагируют на новый инцидент один раз, в том числе после восстановления связи", async ({ page }, testInfo) => {
+async function mockAudio(page: Page) {
   await page.addInitScript(() => {
     Reflect.set(window, "__testNotes", 0);
     class AudioStub {
@@ -32,7 +32,12 @@ test("лента и звук реагируют на новый инцидент
     }
     Reflect.set(window, "AudioContext", AudioStub);
   });
+  // A chime consists of the two oscillators used by the application.
+  return async () => (await page.evaluate(() => Reflect.get(window, "__testNotes") as number)) / 2;
+}
 
+test("D30 публикует тихие приоритеты один раз и сохраняет точки после переподключения", async ({ page }, testInfo) => {
+  const chimes = await mockAudio(page);
   const app = await startDashboard();
   try {
     await page.goto(`${app.url}/admin/incidents`, { waitUntil: "domcontentloaded" });
@@ -41,20 +46,31 @@ test("лента и звук реагируют на новый инцидент
     await expect(sound).toHaveAttribute("aria-pressed", "false");
     await sound.click();
     await expect(sound).toHaveAttribute("aria-pressed", "true");
-    const notes = () => page.evaluate(() => Reflect.get(window, "__testNotes") as number);
-    expect(await notes()).toBe(0);
+    expect(await chimes()).toBe(0);
 
     const rows = JSON.parse(await readLive(app.dataDir)) as Array<Record<string, unknown>>;
-    rows.push({
+    const incident = {
       ...rows[0],
       id: "INC001000000001",
       header: "Новый тестовый инцидент в витрине",
       priorityId: 3,
-    });
+      submitDate: new Date(Date.now() - 2 * 3600_000).toISOString(),
+      deadline: new Date(Date.now() + 10 * 60_000).toISOString(),
+    };
+    rows.push(
+      incident,
+      { ...incident, id: "INC-Q-MEDIUM", header: "Тихий средний", priorityId: 2, deadline: null },
+      { ...incident, id: "INC-Q-LOW", header: "Тихий низкий", priorityId: 1, deadline: null },
+    );
     await writeLive(app.dataDir, JSON.stringify(rows));
-    const trigger = page.getByRole("button", { name: "События, новых: 1" });
+    const trigger = page.getByRole("button", { name: "События, новых: 3" });
     await expect(trigger).toBeVisible();
-    await expect.poll(notes).toBe(2);
+    const summary = page.locator("[data-category]");
+    for (const category of ["high", "medium", "low", "near"]) {
+      await expect(page.locator(`[data-category="${category}"]`)).toHaveAttribute("data-unread", "true");
+    }
+    await expect(summary.filter({ hasText: "У координаторов" })).not.toHaveAttribute("data-unread", "true");
+    expect(await chimes()).toBe(0);
 
     await app.halt();
     await expect(page.getByText("Переподключение")).toBeVisible();
@@ -63,8 +79,9 @@ test("лента и звук реагируют на новый инцидент
     await expect(trigger).toBeVisible();
     await trigger.click();
     const feed = page.getByRole("dialog", { name: "События" });
-    await expect(feed.getByRole("listitem").getByText("Новый инцидент", { exact: true })).toHaveCount(1);
-    expect(await notes()).toBe(2);
+    await expect(feed.getByRole("listitem").getByText("Новый инцидент", { exact: true })).toHaveCount(3);
+    await expect(page.locator('[data-category="high"]')).toHaveAttribute("data-unread", "true");
+    expect(await chimes()).toBe(0);
     await page.screenshot({ path: testInfo.outputPath("dashboard-events.png") });
 
     await feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" }).click();
@@ -72,8 +89,19 @@ test("лента и звук реагируют на новый инцидент
     await expect(dialog.getByText("INC001000000001", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" })).toBeFocused();
+    await expect(page.locator('[data-category="high"]')).not.toHaveAttribute("data-unread", "true");
+    await expect(page.locator('[data-category="near"]')).not.toHaveAttribute("data-unread", "true");
+    await expect(page.locator('[data-category="low"]')).toHaveAttribute("data-unread", "true");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "События", exact: true })).toBeFocused();
+
+    const medium = page.locator('[data-category="medium"]');
+    await medium.click();
+    const quietCard = page.locator('#queue-medium [data-incident-id="INC-Q-MEDIUM"]');
+    await expect(quietCard.locator("[data-card-title]")).toBeFocused();
+    await expect(medium).not.toHaveAttribute("data-unread", "true");
+    await expect(quietCard).not.toHaveAttribute("data-pulse", "true");
+    expect(await chimes()).toBe(0);
 
     await sound.click();
     await expect(sound).toHaveAttribute("aria-pressed", "false");
@@ -173,7 +201,151 @@ test("D20 ведёт к точной секции SLA и пересчитыва�
     await expect(deadline("overdue").locator(sameId)).toHaveCount(1);
     await expect(page.locator("#queue-high").locator(sameId)).toHaveCount(1);
     await overdueButton.click();
-    await expect(deadline("overdue")).toBeFocused();
+    await expect(deadline("overdue").locator(sameId).locator("[data-card-title]")).toBeFocused();
+    await expect(overdueButton).not.toHaveAttribute("data-unread", "true");
+  } finally {
+    await app.stop();
+  }
+});
+
+test("D30 группирует звук, показывает точную критическую карточку и даёт два импульса после прокрутки", async ({ page }) => {
+  const chimes = await mockAudio(page);
+  const demo: RawIncidentFields[] = JSON.parse(await readFile("data/demo/character_problems.json", "utf8"));
+  const timestamp = Date.now();
+  const base = { ...demo[0], assignedEmployee: null, priorityId: 4 };
+  const rows = [1, 2, 3].map((index) => ({
+    ...base, id: `INC-SYN-10${index}`, header: `Прежний критический ${index}`,
+    submitDate: new Date(timestamp - index * 3600_000).toISOString(), deadline: null,
+  }));
+  const next = {
+    ...base, id: "INC-SYN-104", header: "Новый критический у координаторов",
+    assignedGroupName: COORDINATOR_TEAM, assignedEmployee: "Ирина Волкова",
+    submitDate: new Date(timestamp - 3600_000).toISOString(),
+    deadline: new Date(timestamp + 4 * 60_000).toISOString(),
+  };
+  const second = { ...base, id: "INC-SYN-105", header: "Второй новый критический", deadline: null };
+  const app = await startDashboard("rules", "", { incidents: rows });
+  try {
+    await page.goto(`${app.url}/admin/incidents`);
+    const critical = page.locator('[data-category="critical"]');
+    const coordinator = page.locator('[data-category="coordinator"]');
+    const near = page.locator('[data-category="near"]');
+    const criticalCard = (id: string) => page.locator(`#queue-critical [data-incident-id="${id}"]`);
+    const sound = page.getByRole("button", { name: "Звук оповещений" });
+    await expect(critical.locator("strong")).toHaveText("3");
+    await expect(critical).not.toHaveAttribute("data-unread", "true");
+    await sound.click();
+    expect(await chimes()).toBe(0);
+
+    await writeLive(app.dataDir, JSON.stringify([...rows, next]));
+    await expect(critical.locator("strong")).toHaveText("4");
+    await expect(critical).toHaveAttribute("data-unread", "true");
+    await expect(coordinator).toHaveAttribute("data-unread", "true");
+    await expect(near).toHaveAttribute("data-unread", "true");
+    await expect.poll(chimes).toBe(1);
+    const firstLabel = criticalCard(next.id).getByText("Новый", { exact: true });
+    await expect(firstLabel).toBeVisible();
+    const markerAnimation = () => firstLabel.evaluate((label) =>
+      getComputedStyle(label.parentElement!, "::before").animationName);
+    expect(await markerAnimation()).not.toBe("none");
+
+    await app.halt();
+    await expect(page.getByText("Переподключение", { exact: true })).toBeVisible();
+    await app.resume();
+    await expect(page.getByText("Данные актуальны", { exact: true })).toBeVisible();
+    await expect(critical).toHaveAttribute("data-unread", "true");
+    expect(await chimes()).toBe(1);
+
+    await page.getByRole("button", { name: /^События/ }).click();
+    const journal = page.getByRole("dialog", { name: "События" });
+    await expect(journal.getByRole("listitem").getByText("Новый критический инцидент", { exact: true })).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(critical).toHaveAttribute("data-unread", "true");
+
+    await writeLive(app.dataDir, JSON.stringify([...rows, next, second]));
+    await expect(critical.locator("strong")).toHaveText("5");
+    await expect.poll(chimes).toBe(2);
+    const search = page.getByRole("searchbox", { name: "Поиск инцидентов" });
+    await search.fill("Прежний");
+    await expect(criticalCard(second.id)).toHaveCount(0);
+    await page.evaluate(() => {
+      const pulses: { id: string | null; type: string; visible: boolean }[] = [];
+      Reflect.set(window, "__pulses", pulses);
+      for (const type of ["animationstart", "animationiteration", "animationend"]) {
+        document.addEventListener(type, (incoming) => {
+          const event = incoming as AnimationEvent;
+          if (event.animationName.includes("incident-pulse") && event.target instanceof HTMLElement) {
+            const title = event.target.querySelector("[data-card-title]")!.getBoundingClientRect();
+            pulses.push({
+              id: event.target.getAttribute("data-incident-id"), type,
+              visible: title.top >= 0 && title.bottom <= innerHeight,
+            });
+          }
+        });
+      }
+    });
+    await critical.focus();
+    await page.keyboard.press("Enter");
+    const target = criticalCard(second.id);
+    await expect(target.locator("[data-card-title]")).toBeFocused();
+    await expect(target).toHaveAttribute("data-pulse", "true");
+    await expect(target).toHaveCSS("animation-iteration-count", "2");
+    await expect(criticalCard(next.id)).toHaveCount(0);
+    await expect(critical).toHaveAttribute("data-unread", "true");
+    await expect(critical.locator("strong")).toHaveText("5");
+    await expect(search).toHaveValue("Прежний");
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "__pulses"))).toEqual(
+      ["animationstart", "animationiteration", "animationend"].map(type => ({ id: second.id, type, visible: true })),
+    );
+    await expect(target).not.toHaveAttribute("data-pulse", "true");
+
+    await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(await markerAnimation()).toBe("none");
+    await near.click();
+    const slaCard = page.locator(`#queue-near [data-incident-id="${next.id}"]`);
+    await expect(slaCard.locator("[data-card-title]")).toBeFocused();
+    await expect(slaCard).not.toHaveAttribute("data-pulse", "true");
+    await expect(critical).not.toHaveAttribute("data-unread", "true");
+    await expect(coordinator).not.toHaveAttribute("data-unread", "true");
+    await expect(firstLabel).toHaveCount(0);
+    expect(await chimes()).toBe(2);
+
+    await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "false");
+    const changed = { ...next, assignedEmployee: "Анна Кузнецова" };
+    await writeLive(app.dataDir, JSON.stringify([...rows, changed, second]));
+    await expect(coordinator).toHaveAttribute("data-unread", "true");
+    await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "true");
+    expect(await chimes()).toBe(2);
+    const latest = [...rows, { ...changed, assignedEmployee: "Ольга Иванова" }, second];
+    await writeLive(app.dataDir, JSON.stringify(latest));
+    await expect.poll(chimes).toBe(3);
+    await expect(coordinator).toHaveAccessibleName(/непросмотрено 2/);
+    await coordinator.click();
+    await expect(page.locator(`#queue-coordinator [data-incident-id="${next.id}"] [data-card-title]`)).toBeFocused();
+    await expect(coordinator).toHaveAccessibleName(/непросмотрено 1/);
+    expect(await chimes()).toBe(3);
+
+    const reduced = { ...second, id: "INC-SYN-106", header: "Критический с сокращённым движением" };
+    await writeLive(app.dataDir, JSON.stringify([...latest, reduced]));
+    await expect.poll(chimes).toBe(4);
+    await expect(critical).toHaveCSS("animation-name", "none");
+    await critical.click();
+    const staticCard = criticalCard(reduced.id);
+    await expect(staticCard).toHaveAttribute("data-pulse", "true");
+    await expect(staticCard).toHaveCSS("animation-name", "none");
+    await expect(staticCard).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
+
+    const reset = await page.request.post(`${app.url}${API_PREFIX}/demo/reset`, {
+      data: {}, headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+    });
+    expect(reset.ok()).toBe(true);
+    await expect(critical.locator("strong")).toHaveText("3");
+    await expect(page.locator('[data-category][data-unread="true"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "События, новых: 1" })).toBeVisible();
+    expect(await chimes()).toBe(4);
   } finally {
     await app.stop();
   }

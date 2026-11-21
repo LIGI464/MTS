@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { IncidentAlert } from "./activity";
 
-function playChime(context: AudioContext): void {
-  const start = context.currentTime + .015;
-
+function playChime(context: AudioContext, start: number): void {
   for (const [index, frequency] of [587.33, 783.99].entries()) {
     const time = start + index * .13;
     const oscillator = context.createOscillator();
@@ -23,21 +20,27 @@ function playChime(context: AudioContext): void {
   }
 }
 
-export function useIncidentSound(alert: IncidentAlert | null) {
+export function useIncidentSound(sequence: number) {
   const [enabled, setEnabled] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [activating, setActivating] = useState(false);
   const contextRef = useRef<AudioContext | null>(null);
   const lastPlayed = useRef(0);
-  const sequence = alert?.sequence ?? 0;
+  const nextStart = useRef(0);
   const currentSequence = useRef(sequence);
 
   useEffect(() => {
     currentSequence.current = sequence;
-    if (!enabled || sequence <= lastPlayed.current) return;
+    const count = sequence - lastPlayed.current;
     lastPlayed.current = sequence;
     const context = contextRef.current;
-    if (context?.state === "running") playChime(context);
+    if (!enabled || count <= 0 || context?.state !== "running") return;
+    let start = Math.max(context.currentTime + .015, nextStart.current);
+    for (let index = 0; index < count; index++) {
+      playChime(context, start);
+      start += .34;
+    }
+    nextStart.current = start;
   }, [enabled, sequence]);
 
   useEffect(() => () => {
@@ -49,7 +52,10 @@ export function useIncidentSound(alert: IncidentAlert | null) {
   async function toggle() {
     if (enabled) {
       setEnabled(false);
-      void contextRef.current?.suspend().catch(() => {});
+      const context = contextRef.current;
+      contextRef.current = null;
+      nextStart.current = 0;
+      void context?.close().catch(() => {});
       return;
     }
     if (activating) return;
