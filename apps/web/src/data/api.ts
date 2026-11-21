@@ -4,10 +4,12 @@ import {
   ApiErrorSchema,
   AssistantChatRequestSchema,
   AssistantChatResponseSchema,
+  PriorityFeedSchema,
   SnapshotSchema,
   type AnalysisResult,
   type AssistantChatRequest,
   type AssistantChatResponse,
+  type PriorityFeed,
   type Snapshot,
 } from "@mts/contracts";
 
@@ -63,6 +65,20 @@ export async function requestAnalysis(id: string, token?: string): Promise<Analy
   if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось выполнить анализ");
   const parsed = AnalysisResultSchema.safeParse(await response.json());
   if (!parsed.success) throw new DashboardRequestError("INVALID_ANALYSIS", "Ответ анализа не прошёл проверку");
+  return parsed.data;
+}
+
+export async function requestPriorityFeed(token: string | undefined, signal: AbortSignal): Promise<PriorityFeed> {
+  const headers = new Headers();
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_PREFIX}/incidents/priorities`, {
+    method: "POST",
+    headers,
+    signal,
+  });
+  if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось загрузить приоритеты", response.status);
+  const parsed = PriorityFeedSchema.safeParse(await response.json());
+  if (!parsed.success) throw new DashboardRequestError("INVALID_PRIORITIES", "Ответ с приоритетами не прошёл проверку");
   return parsed.data;
 }
 

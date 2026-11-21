@@ -31,7 +31,7 @@ export function AppShell({
     <div className={styles.shell} data-surface="canvas">
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <ProjectLink href="/admin/incidents" className={styles.brand} aria-label="МТС — пульт координатора">
+          <ProjectLink href="/admin/incidents" className={styles.brand} aria-label="МТС — Goida-board">
             <img src={logo} alt="" className={styles.brandMark} />
           </ProjectLink>
           <nav className={styles.navigation} aria-label="Разделы проекта">

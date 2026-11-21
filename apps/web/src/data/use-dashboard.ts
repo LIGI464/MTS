@@ -6,28 +6,27 @@ import {
   type AnalysisResult,
   type AssistantChatRequest,
   type AssistantChatResponse,
-  type Notice,
   type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFrameState } from "./apply";
+import { applyFrame, createClientFrameState, type ClientFrameState } from "./apply";
 import { fetchDashboard, requestAnalysis, requestAssistantChat, requestReset } from "./api";
 import { createIncidentFixtures } from "./incident-fixtures";
 import { incidentApi, type IncidentClient } from "./incidents";
+import { usePriorityFeed } from "./use-priority-feed";
 
 export type DemoStep = "critical" | "assign" | "deadline" | "resolve";
 
 type Connection = "connecting" | "live" | "reconnecting" | "mock";
 
-export function useDashboard(): {
+export function useDashboard(operatorToken?: string): {
   snapshot: Snapshot | null;
   nowMs: number;
+  priorityFeed: ReturnType<typeof usePriorityFeed>;
   sseRevision: number | null;
   incidentClient: IncidentClient;
   connection: Connection;
-  newNotices: Notice[];
-  dismissNotice: (seq: number) => void;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
   requestAssistantChat: (payload: AssistantChatRequest, token?: string) => Promise<AssistantChatResponse>;
   resetDemo: (token: string) => Promise<Snapshot>;
@@ -109,19 +108,13 @@ export function useDashboard(): {
     return () => window.clearInterval(timer);
   }, []);
 
-  const dismissNotice = useCallback((seq: number) => {
-    const next = dismissFrameNotice(frameRef.current, seq);
-    frameRef.current = next;
-    setFrame(next);
-  }, []);
-
   async function requestAssistant(
     payload: AssistantChatRequest,
     token?: string,
   ): Promise<AssistantChatResponse> {
     if (!mockMode) return requestAssistantChat(payload, token);
     const now = new Date().toISOString();
-  const incident = payload.context.incidentId
+    const incident = payload.context.incidentId
       ? frameRef.current.snapshot?.incidents.find((item) => item.id === payload.context.incidentId)
       : undefined;
     const question = payload.question.trim();
@@ -192,14 +185,15 @@ export function useDashboard(): {
     if (boot.fixtures) accept(boot.fixtures.step(step, Date.now()), "sse");
   }
 
+  const priorityFeed = usePriorityFeed(frame.snapshot, nowMs, mockMode, operatorToken);
+
   const value = {
     snapshot: frame.snapshot,
     nowMs,
     sseRevision,
+    priorityFeed,
     incidentClient,
     connection,
-    newNotices: frame.visible,
-    dismissNotice,
     runAnalysis,
     requestAssistantChat: requestAssistant,
     resetDemo,

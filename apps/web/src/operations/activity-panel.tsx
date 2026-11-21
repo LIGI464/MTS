@@ -63,7 +63,9 @@ export function ActivityPanel({ events, unreadCount, markRead, onInspect, childr
       {children}
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="detail" data-surface="surface">
+        <Dialog.Content className="detail" data-surface="surface" onPointerDownOutside={(event) => {
+          if (event.target instanceof Element && event.target.closest("[data-incident-details]")) event.preventDefault();
+        }}>
           <div className="detail-heading">
             <div>
               <Dialog.Title>События</Dialog.Title>

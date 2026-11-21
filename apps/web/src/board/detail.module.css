@@ -2,6 +2,22 @@
   width: min(100% - 32px, 550px);
 }
 
+.recommendation {
+  margin: 14px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--canvas);
+  overflow-wrap: anywhere;
+}
+
+.recommendation strong { font-size: 14px; }
+
+.recommendation p {
+  margin: 4px 0 0;
+  font: 400 14px/1.4 var(--font-text);
+}
+
 .texts,
 .section {
   margin: 12px 0;

@@ -52,14 +52,14 @@ function QueueMetric({ category, count, unread, onJump, primary = false }: {
   const critical = category === "critical";
   return (
     <button type="button" className={primary ? styles.summaryCard : styles.summarySegment}
-      data-category={category} data-unread={unread > 0 || undefined}
+      data-category={category} data-active={count > 0 || undefined} data-unread={unread > 0 || undefined}
       aria-label={unread > 0 ? `${label}, всего ${count}, непросмотрено ${unread}` : undefined}
       aria-controls={queueId(category)} onClick={() => onJump(category)}>
       <span className={styles.summaryLabel}><span><Icon name={icon} size={primary ? 21 : 16} /></span>{label}</span>
       <span className={styles.summaryValues}>
         <strong data-numeric="tabular">{count}</strong>
-        {critical && unread > 0 ? <span className={styles.unreadCount}>Непросмотрено {unread}</span> : null}
       </span>
+      {critical && unread > 0 ? <span className={styles.unreadCount}>Непросмотрено {unread}</span> : null}
       {!critical && unread > 0 ? <span className={styles.summaryDot} aria-hidden="true" /> : null}
       {primary ? <span className={styles.summaryArrow}><Icon name="arrow-down" size={20} /></span> : null}
     </button>

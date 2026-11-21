@@ -4,6 +4,7 @@ import fastifyStatic from "@fastify/static";
 import { API_PREFIX, type ApiError } from "@mts/contracts";
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import { registerAnalysisRoutes } from "../analysis/index.js";
+import { registerPriorityFeed } from "../analysis/priorities.js";
 import { registerAssistantRoutes } from "../assistant/index.js";
 import { registerDemoRoutes } from "../demo/index.js";
 import { registerItsmRoutes } from "../itsm/index.js";
@@ -31,6 +32,7 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
   registerEvents(app, runtime);
   registerDemoRoutes(app, context);
   registerAnalysisRoutes(app, context);
+  registerPriorityFeed(app, context);
   registerAssistantRoutes(app, context);
   registerItsmRoutes(app, context);
   registerImportRoutes(app, context);

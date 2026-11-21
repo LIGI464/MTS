@@ -1,6 +1,6 @@
 import { makeMockTimeline, type Snapshot } from "@mts/contracts";
 import { describe, expect, it } from "vitest";
-import { applyFrame, createClientFrameState, dismissFrameNotice } from "../apply";
+import { applyFrame, createClientFrameState } from "../apply";
 import { errorFromBody } from "../api";
 
 const nowMs = Date.parse("2026-01-15T09:00:00.000Z");
@@ -24,38 +24,14 @@ describe("applyFrame", () => {
     expect(applyFrame(latest, timeline.frames.critical, "sse")).toBe(latest);
   });
 
-  it("does not toast the same notice twice when the SSE frame repeats", () => {
-    let state = applyFrame(createClientFrameState(), timeline.initial, "get");
-    state = applyFrame(state, timeline.frames.critical, "sse");
-    const repeated = applyFrame(state, timeline.frames.critical, "sse");
-    expect(repeated.visible.map((notice) => notice.seq)).toEqual(state.visible.map((notice) => notice.seq));
-    expect(repeated.visible).toHaveLength(1);
-  });
-
-  it("keeps only the reset notice and drops earlier toasts", () => {
-    let state = applyFrame(createClientFrameState(), timeline.initial, "get");
-    state = applyFrame(state, timeline.frames.resolve, "sse");
-    expect(state.visible.map((notice) => notice.kind)).toEqual([
-      "critical.new",
-      "coordinator.assigned",
-      "critical.resolved",
-    ]);
-    const reset = withSource(timeline.initial, "ok");
-    const next = applyFrame(state, {
-      ...reset,
+  it("passes a reset snapshot to consumers, including its appended notice", () => {
+    const state = applyFrame(createClientFrameState(), timeline.frames.resolve, "sse");
+    const reset: Snapshot = {
+      ...timeline.initial,
       revision: 6,
-      notices: [
-        {
-          seq: 4,
-          kind: "demo.reset",
-          incidentId: null,
-          title: "Набор восстановлен",
-          at: reset.serverNow,
-        },
-      ],
-    }, "reset");
-    expect(next.visible.map((notice) => notice.kind)).toEqual(["demo.reset"]);
-    expect(next.watermark).toBe(state.watermark);
+      notices: [{ seq: 4, kind: "demo.reset", incidentId: null, title: "Набор восстановлен", at: timeline.initial.serverNow }],
+    };
+    expect(applyFrame(state, reset, "reset")).toEqual({ snapshot: reset, sawSse: true });
   });
 
   it("lets the same revision change the source status", () => {
@@ -69,35 +45,15 @@ describe("applyFrame", () => {
     expect(ignored.snapshot?.source.status).toBe("unavailable");
   });
 
-  it("dismisses a toast without moving the watermark or restoring it", () => {
-    let state = applyFrame(createClientFrameState(), timeline.initial, "get");
-    const watermark = state.watermark;
-    state = applyFrame(state, timeline.frames.critical, "sse");
-    state = dismissFrameNotice(state, state.visible[0].seq);
-    expect(state.visible).toEqual([]);
-    expect(state.watermark).toBe(watermark);
-    const repeated = applyFrame(state, timeline.frames.critical, "sse");
-    expect(repeated.visible).toEqual([]);
-  });
-
   it("walks critical, assign, deadline and resolve without an API", () => {
     let state = applyFrame(createClientFrameState(), timeline.initial, "get");
-    expect(state.visible).toEqual([]);
     state = applyFrame(state, timeline.frames.critical, "sse");
-    expect(state.visible.map((notice) => notice.kind)).toEqual(["critical.new"]);
     expect(state.snapshot?.groups.critical).toEqual(["INC000000000001"]);
     state = applyFrame(state, timeline.frames.assign, "sse");
-    expect(state.visible.map((notice) => notice.kind)).toEqual(["critical.new", "coordinator.assigned"]);
     expect(state.snapshot?.groups.critical).toContain("INC000000000001");
     expect(state.snapshot?.groups.coordinator).toContain("INC000000000001");
     state = applyFrame(state, timeline.frames.deadline, "sse");
-    expect(state.visible.map((notice) => notice.seq)).toEqual([1, 2]);
     state = applyFrame(state, timeline.frames.resolve, "sse");
-    expect(state.visible.map((notice) => notice.kind)).toEqual([
-      "critical.new",
-      "coordinator.assigned",
-      "critical.resolved",
-    ]);
     expect(state.snapshot?.groups.critical).not.toContain("INC000000000001");
     expect(state.snapshot?.groups.coordinator).not.toContain("INC000000000001");
   });

@@ -1,4 +1,6 @@
-import type { Notice, Snapshot } from "@mts/contracts";
+import {
+  matchesPriorityRecommendation, priorityQueueMembership, type Snapshot,
+} from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AssistantHost } from "./assistant";
@@ -7,13 +9,13 @@ import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
 import type { DemoStep, useDashboard } from "./data";
 import { coordinatorQuery } from "./data/incidents";
-import { Icon } from "./icons";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
+import { PriorityFeed, type ChosenRecommendation } from "./operations/priority-feed";
 import { buildQueues, DEFAULT_FILTERS, QUEUE_LABELS, SUMMARY_SEGMENTS, PRIMARY_QUEUES, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
-import { useQueueNavigation } from "./operations/use-queue-navigation";
+import { useQueueNavigation, type QueueTarget } from "./operations/use-queue-navigation";
 import type { useIncidentAlerts } from "./operations/use-incident-alerts";
 import type { useIncidentSound } from "./operations/use-incident-sound";
 import operationsStyles from "./operations/dashboard.module.css";
@@ -32,10 +34,12 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   activity: ReturnType<typeof useIncidentAlerts>;
   sound: ReturnType<typeof useIncidentSound>;
 }) {
-  const [selection, setSelection] = useState<{ id: string; attentionKey?: string } | null>(null);
+  const [selection, setSelection] = useState<{
+    id: string; attentionKey: string | null; target?: QueueTarget; recommendation?: ChosenRecommendation;
+  } | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<{ node: HTMLElement | null; fromFeed: boolean } | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
   const groups = snapshot?.groups ?? EMPTY_GROUPS;
@@ -47,7 +51,8 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   const queues = buildQueues(filtered.incidents, groups, dashboard.nowMs, filters.status !== "default" && filters.status !== "active");
   const countsDiffer = [...PRIMARY_QUEUES, ...SUMMARY_SEGMENTS].some((category) => summary[category].length !== queues[category].length);
   const { markViewed, resetSequence } = activity;
-  const navigation = useQueueNavigation(queues, summary, activity.pending, resetSequence, markViewed);
+  const navigation = useQueueNavigation(queues, summary, activity.pending, resetSequence);
+  const inspectTarget = navigation.inspect;
 
   useEffect(() => {
     if (resetSequence < 0) return;
@@ -55,25 +60,42 @@ export function App({ dashboard, operatorToken, activity, sound }: {
     setFilters(DEFAULT_FILTERS);
   }, [resetSequence]);
 
-  function select(id: string, key?: string | null) {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const guessed = key === undefined ? activity.pending.find((entry) => entry.incidentId === id)?.key : key;
-    setSelection({ id, attentionKey: guessed ?? undefined });
+  function select(
+    id: string, attentionKey: string | null, target?: QueueTarget,
+    recommendation?: ChosenRecommendation, source?: HTMLElement,
+  ) {
+    const node = source ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    opener.current = { node, fromFeed: Boolean(recommendation) };
+    setSelection({ id, attentionKey, target, recommendation });
+  }
+
+  function chooseRecommendation(recommendation: ChosenRecommendation, source: HTMLButtonElement) {
+    const { entry } = recommendation;
+    if (!snapshot || !matchesPriorityRecommendation(entry, incidents.find(({ id }) => id === entry.incidentId),
+      priorityQueueMembership(snapshot.groups), dashboard.nowMs)) return;
+    navigation.jump(entry.target, {
+      id: entry.incidentId,
+      version: entry.incidentVersion,
+      onArrival: (target) => select(target.id, target.attentionKey, target, recommendation, source),
+      onUnavailable: () => focusFeed(source),
+    });
   }
 
   const detailOpened = useCallback(() => {
     if (selection?.attentionKey) markViewed(selection.attentionKey);
-  }, [selection, markViewed]);
+    if (selection?.target) inspectTarget(selection.target);
+  }, [selection, markViewed, inspectTarget]);
 
   function returnFocus() {
     const target = opener.current;
     opener.current = null;
-    if (target?.isConnected) target.focus({ preventScroll: true });
+    if (target?.fromFeed) focusFeed(target.node);
+    else if (target?.node?.isConnected) target.node.focus({ preventScroll: true });
     else document.getElementById("incident-search")?.focus({ preventScroll: true });
   }
 
   function changeFilters(patch: Partial<QueueFilters>) {
-    navigation.cancel();
+    navigation.cancel(true);
     setFilters((previous) => ({ ...previous, ...patch }));
   }
 
@@ -106,23 +128,12 @@ export function App({ dashboard, operatorToken, activity, sound }: {
         <p className="banner" role="status">Показан последний сохранённый снимок. Источник устарел.</p>
       ) : null}
       {snapshot?.source.status === "unavailable" ? <p className="banner" role="status">Файл временно недоступен</p> : null}
-      {dashboard.newNotices.length > 0 ? (
-        <div className="toasts" aria-label="Оповещения">
-          {dashboard.newNotices.map((notice) => (
-            <article key={notice.seq} className={notice.kind === "critical.resolved" ? "toast resolved" : "toast"}>
-              <p>{noticeLine(notice)}</p>
-              <button type="button" aria-label="Закрыть оповещение" onClick={() => dashboard.dismissNotice(notice.seq)}>
-                <Icon name="x-lg" size={16} />
-              </button>
-            </article>
-          ))}
-        </div>
-      ) : null}
       {!snapshot && dashboard.connection === "connecting" ? <div className="skeleton" aria-busy="true">Загрузка очереди</div> : null}
       {!snapshot && dashboard.connection !== "connecting" ? <p className="empty-screen">Нет данных</p> : null}
       {snapshot ? (
         <>
           <DashboardMetrics queues={summary} pending={activity.pending} onJump={navigation.jump} />
+          <PriorityFeed data={dashboard.priorityFeed} nowMs={dashboard.nowMs} onChoose={chooseRecommendation} />
           <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
             <div className={operationsStyles.queueHeader}>
               <h2 id="queue-heading">Очереди инцидентов</h2>
@@ -138,20 +149,24 @@ export function App({ dashboard, operatorToken, activity, sound }: {
                 <button type="button" onClick={filtered.retry}>Повторить</button>
               </p>
             ) : null}
-            {navigation.revealed ? (
-              <p className={operationsStyles.countNote} role="status">
-                Заявка {navigation.revealed.id} показана вне фильтров в очереди «{QUEUE_LABELS[navigation.revealed.category].label}».
+            {navigation.revealed.map(({ category, id }) => (
+              <p key={`${category}:${id}`} className={operationsStyles.countNote} role="status">
+                Заявка {id} показана вне фильтров в очереди «{QUEUE_LABELS[category].label}».
               </p>
-            ) : null}
+            ))}
             <IncidentBoard queues={navigation.queues} nowMs={dashboard.nowMs} attention={activity.queues}
-              pulse={navigation.pulse} onPulseEnd={navigation.finishPulse} onInspect={select} />
+              descriptions={dashboard.priorityFeed.descriptions} target={navigation.target} expandedSla={navigation.expandedSla}
+              onToggleSla={navigation.toggleSla} onInspect={(category, id, attention) => {
+                const target = navigation.target(category, id);
+                select(id, target ? target.attentionKey : attention, target);
+              }} />
           </section>
         </>
       ) : null}
       {selection ? (
         <IncidentDetails key={selection.id} id={selection.id} incident={selected}
           nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision}
-          onShown={detailOpened} assistantEscape={assistantOpen}
+          recommendation={selection.recommendation} onShown={detailOpened} assistantEscape={assistantOpen}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
       <AssistantHost
@@ -177,16 +192,7 @@ function badgeText(
   return "Данные загружаются";
 }
 
-function noticeLine(notice: Notice): string {
-  const id = notice.incidentId ? ` ${notice.incidentId}` : "";
-  if (notice.kind === "critical.resolved") return `Критический инцидент решён${id}`;
-  if (notice.kind === "critical.new") {
-    return `Новый критический инцидент${id}${notice.title ? `: ${notice.title}` : ""}`;
-  }
-  if (notice.kind === "coordinator.assigned") {
-    return `Назначен координаторам${id}${notice.title ? `: ${notice.title}` : ""}`;
-  }
-  if (notice.kind === "coordinator.changed") return `Координатор изменён${id}`;
-  if (notice.kind === "demo.reset") return notice.title ?? "Набор восстановлен";
-  return notice.title ?? "Событие";
+function focusFeed(source: HTMLElement | null) {
+  const target = source?.isConnected ? source : document.getElementById("priority-feed-heading");
+  target?.focus();
 }

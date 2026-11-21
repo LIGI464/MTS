@@ -57,9 +57,7 @@ test("D11 показывает пульт, навигацию проекта и 
   await card.getByRole("button", { name: "Подробнее" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", href);
-  const launch = dialog.getByRole("button", { name: "ИИ-анализ" });
-  await expect(launch).toHaveCSS("background-color", "rgb(224, 0, 44)");
-  await expect(launch).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(page.getByRole("button", { name: /Помощник МТС/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 

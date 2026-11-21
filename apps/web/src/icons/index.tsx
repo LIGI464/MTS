@@ -10,6 +10,7 @@ import boxArrowUpRight from "bootstrap-icons/icons/box-arrow-up-right.svg?raw";
 import checkCircle from "bootstrap-icons/icons/check-circle.svg?raw";
 import chevronDoubleUp from "bootstrap-icons/icons/chevron-double-up.svg?raw";
 import chevronDown from "bootstrap-icons/icons/chevron-down.svg?raw";
+import chevronRight from "bootstrap-icons/icons/chevron-right.svg?raw";
 import clipboardData from "bootstrap-icons/icons/clipboard-data.svg?raw";
 import clockHistory from "bootstrap-icons/icons/clock-history.svg?raw";
 import clock from "bootstrap-icons/icons/clock.svg?raw";
@@ -45,6 +46,7 @@ const icons = {
   "check-circle": checkCircle,
   "chevron-double-up": chevronDoubleUp,
   "chevron-down": chevronDown,
+  "chevron-right": chevronRight,
   "clipboard-data": clipboardData,
   clock,
   "clock-history": clockHistory,

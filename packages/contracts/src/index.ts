@@ -73,3 +73,14 @@ export type {
 export { getSlaState, isActiveState } from "./sla.js";
 export { ResolveIncidentSchema, ScenarioCommandSchema } from "./itsm.js";
 export type { HistoryEntry, MutationResult, ResolveIncident, ScenarioCommand, TicketDetail, TicketList, TicketSummary } from "./itsm.js";
+export {
+  INCIDENT_DESCRIPTION_LIMIT,
+  NO_INCIDENT_DESCRIPTION,
+  PriorityFeedSchema,
+  matchesPriorityRecommendation,
+  priorityQueueMembership,
+  priorityResetSequence,
+  prioritySlaKey,
+  priorityTarget,
+} from "./priority-feed.js";
+export type { IncidentDescription, PriorityFeed, PriorityRecommendation } from "./priority-feed.js";

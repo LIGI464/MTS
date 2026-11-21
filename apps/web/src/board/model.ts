@@ -31,7 +31,3 @@ export function compareIncidents(left: Incident, right: Incident): number {
 export function incidentCoordinator(incident: Pick<Incident, "coordinator">) {
   return incident.coordinator ?? null;
 }
-
-export function displayText(value: string | null, empty: string): string {
-  return value?.trim() ? value : empty;
-}

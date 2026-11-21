@@ -1,5 +1,5 @@
 import { API_PREFIX, COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { OPERATOR_TOKEN, readLive, startDashboard, writeLive } from "./support/harness.js";
 
@@ -34,6 +34,14 @@ async function mockAudio(page: Page) {
   });
   // A chime consists of the two oscillators used by the application.
   return async () => (await page.evaluate(() => Reflect.get(window, "__testNotes") as number)) / 2;
+}
+
+async function inspectAndClose(page: Page, card: Locator) {
+  const details = card.getByRole("button", { name: "Подробнее", exact: true });
+  await details.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(details).toBeFocused();
 }
 
 test("D30 публикует тихие приоритеты один раз и сохраняет точки после переподключения", async ({ page }, testInfo) => {
@@ -99,8 +107,11 @@ test("D30 публикует тихие приоритеты один раз и 
     await medium.click();
     const quietCard = page.locator('#queue-medium [data-incident-id="INC-Q-MEDIUM"]');
     await expect(quietCard.locator("[data-card-title]")).toBeFocused();
+    await expect(medium).toHaveAttribute("data-unread", "true");
+    await expect(quietCard).toHaveAttribute("data-selected", "true");
+    await inspectAndClose(page, quietCard);
     await expect(medium).not.toHaveAttribute("data-unread", "true");
-    await expect(quietCard).not.toHaveAttribute("data-pulse", "true");
+    await expect(quietCard).not.toHaveAttribute("data-selected", "true");
     expect(await chimes()).toBe(0);
 
     await sound.click();
@@ -131,11 +142,34 @@ test("D20 показывает пустую сводку, два ряда и о�
 
     const ids = ["critical", "coordinator", "deadlines", "high", "medium", "low"];
     const groups = page.locator(ids.map((id) => `#queue-${id}`).join(", "));
-    await expect(page.getByRole("region", { name: "Сроки", exact: true }).getByText("Нет инцидентов")).toHaveCount(2);
+    const deadlines = page.getByRole("region", { name: "Сроки", exact: true });
+    await expect(deadlines.locator('button[aria-expanded="false"]')).toHaveCount(2);
+    const toggle = deadlines.getByRole("button", { name: /Срок близко/ });
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(deadlines.getByText("Нет инцидентов")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(deadlines.getByText("Нет инцидентов")).toHaveCount(0);
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
       await expect(summary).toBeInViewport();
+      const segments = summary.locator("[data-category]");
+      for (const index of [2, 3, 4, 5, 6]) {
+        const segment = segments.nth(index);
+        await segment.hover();
+        const outlines = await segments.evaluateAll((buttons) => buttons.map((button) => {
+          const style = getComputedStyle(button, "::after");
+          return [style.content, style.borderColor, style.borderWidth, style.transform, style.pointerEvents];
+        }));
+        expect(outlines.filter(([content]) => content !== "none")).toHaveLength(1);
+        expect(outlines[index]).toEqual(['""', "rgb(255, 0, 50)", "1px", "matrix(1, 0, -0.267949, 1, 0, 0)", "none"]);
+      }
+      await page.getByRole("heading", { name: "Goida-board" }).hover();
+      expect(await segments.evaluateAll((buttons) => buttons.every((button) =>
+        getComputedStyle(button, "::after").content === "none"))).toBe(true);
       const layout = await groups.evaluateAll((items) => items.map((item) => {
         const { x, y } = item.getBoundingClientRect();
         return { id: item.id, x, y };
@@ -170,45 +204,61 @@ test("D20 ведёт к точной секции SLA и пересчитыва�
     const summary = page.getByRole("group", { name: "Сводка инцидентов" });
     const deadline = (kind: "near" | "overdue") => page.locator(`#queue-${kind}`);
     const sameId = `[data-incident-id=${JSON.stringify(near.id)}]`;
-    await expect(deadline("near").locator(sameId)).toHaveCount(1);
+    const toggle = (kind: "near" | "overdue") => deadline(kind).locator("[data-sla-toggle]");
+    await expect(toggle("near")).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle("overdue")).toHaveAttribute("aria-expanded", "false");
+    await expect(deadline("near").locator(sameId)).toHaveCount(0);
     await expect(deadline("overdue").locator(sameId)).toHaveCount(0);
     await expect(page.locator("#queue-high").locator(sameId)).toHaveCount(1);
     await expect(page.locator("#queue-coordinator").locator(`[data-incident-id=${JSON.stringify(research.id)}]`)).toHaveCount(1);
     await expect(page.locator("#queue-medium").locator(`[data-incident-id=${JSON.stringify(research.id)}]`)).toHaveCount(0);
 
     const nearButton = summary.getByRole("button", { name: /Срок близко/ });
+    await summary.locator('[data-category="coordinator"]').focus();
+    await page.keyboard.press("Tab");
+    await expect(nearButton).toBeFocused();
+    expect(await nearButton.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
     const overdueButton = summary.getByRole("button", { name: /Просрочены/ });
-    await nearButton.focus();
     await page.keyboard.press("Enter");
-    await expect(deadline("near")).toBeFocused();
-    await expect(deadline("near").getByRole("heading")).toBeInViewport();
+    await expect(deadline("near").locator(sameId).locator("[data-card-title]")).toBeFocused();
+    await expect(deadline("near").locator(sameId)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator("#queue-high").locator(sameId)).not.toHaveAttribute("data-selected", "true");
+    const description = "Статусы новых заказов обновляются с задержкой.";
+    await expect(deadline("near").locator(sameId).getByText(description)).toBeVisible();
+    await expect(page.locator("#queue-high").locator(sameId).getByText(description)).toBeVisible();
+    await expect(toggle("overdue")).toHaveAttribute("aria-expanded", "false");
     await overdueButton.click();
-    await expect(deadline("overdue")).toBeFocused();
-    await expect(deadline("overdue").getByRole("heading")).toBeInViewport();
+    await expect(deadline("overdue").locator("[data-card-title]")).toBeFocused();
+    await expect(toggle("near")).toHaveAttribute("aria-expanded", "false");
 
     const search = page.getByRole("searchbox", { name: "Поиск инцидентов" });
     await search.fill(String(overdue.id));
     await expect(nearButton).toHaveText("Срок близко1");
-    await expect(deadline("near").getByText("Нет инцидентов")).toBeVisible();
     await expect(page.locator("#queue-count-note")).toBeVisible();
+    await nearButton.click();
+    await expect(deadline("near").locator(sameId).locator("[data-card-title]")).toBeFocused();
+    await expect(search).toHaveValue(String(overdue.id));
     await page.getByRole("button", { name: "Сбросить", exact: true }).click();
-    await expect(deadline("near").locator(sameId)).toHaveCount(1);
+    await expect(deadline("near").locator(sameId)).toHaveAttribute("data-selected", "true");
 
     await page.clock.fastForward(300_000);
     await expect(nearButton).toHaveText("Срок близко0");
     await expect(overdueButton).toHaveText("Просрочены2");
     await expect(deadline("near").locator(sameId)).toHaveCount(0);
-    await expect(deadline("overdue").locator(sameId)).toHaveCount(1);
     await expect(page.locator("#queue-high").locator(sameId)).toHaveCount(1);
     await overdueButton.click();
-    await expect(deadline("overdue").locator(sameId).locator("[data-card-title]")).toBeFocused();
+    const overdueCard = deadline("overdue").locator(sameId);
+    await expect(overdueCard.locator("[data-card-title]")).toBeFocused();
+    await expect(overdueCard).toHaveAttribute("data-selected", "true");
+    await expect(overdueButton).toHaveAttribute("data-unread", "true");
+    await inspectAndClose(page, overdueCard);
     await expect(overdueButton).not.toHaveAttribute("data-unread", "true");
   } finally {
     await app.stop();
   }
 });
 
-test("D30 группирует звук, показывает точную критическую карточку и даёт два импульса после прокрутки", async ({ page }) => {
+test("P20 группирует звук, сохраняет точную подсветку и подтверждает просмотр при открытии деталей", async ({ page }) => {
   const chimes = await mockAudio(page);
   const demo: RawIncidentFields[] = JSON.parse(await readFile("data/demo/character_problems.json", "utf8"));
   const timestamp = Date.now();
@@ -234,6 +284,7 @@ test("D30 группирует звук, показывает точную кр�
     const sound = page.getByRole("button", { name: "Звук оповещений" });
     await expect(critical.locator("strong")).toHaveText("3");
     await expect(critical).not.toHaveAttribute("data-unread", "true");
+    await expect(critical).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
     await sound.click();
     expect(await chimes()).toBe(0);
 
@@ -268,36 +319,20 @@ test("D30 группирует звук, показывает точную кр�
     const search = page.getByRole("searchbox", { name: "Поиск инцидентов" });
     await search.fill("Прежний");
     await expect(criticalCard(second.id)).toHaveCount(0);
-    await page.evaluate(() => {
-      const pulses: { id: string | null; type: string; visible: boolean }[] = [];
-      Reflect.set(window, "__pulses", pulses);
-      for (const type of ["animationstart", "animationiteration", "animationend"]) {
-        document.addEventListener(type, (incoming) => {
-          const event = incoming as AnimationEvent;
-          if (event.animationName.includes("incident-pulse") && event.target instanceof HTMLElement) {
-            const title = event.target.querySelector("[data-card-title]")!.getBoundingClientRect();
-            pulses.push({
-              id: event.target.getAttribute("data-incident-id"), type,
-              visible: title.top >= 0 && title.bottom <= innerHeight,
-            });
-          }
-        });
-      }
-    });
     await critical.focus();
     await page.keyboard.press("Enter");
     const target = criticalCard(second.id);
     await expect(target.locator("[data-card-title]")).toBeFocused();
-    await expect(target).toHaveAttribute("data-pulse", "true");
-    await expect(target).toHaveCSS("animation-iteration-count", "2");
+    await expect(target).toHaveAttribute("data-selected", "true");
     await expect(criticalCard(next.id)).toHaveCount(0);
-    await expect(critical).toHaveAttribute("data-unread", "true");
+    await expect(critical).toHaveAccessibleName(/непросмотрено 2/);
     await expect(critical.locator("strong")).toHaveText("5");
     await expect(search).toHaveValue("Прежний");
-    await expect.poll(() => page.evaluate(() => Reflect.get(window, "__pulses"))).toEqual(
-      ["animationstart", "animationiteration", "animationend"].map(type => ({ id: second.id, type, visible: true })),
-    );
-    await expect(target).not.toHaveAttribute("data-pulse", "true");
+    await page.waitForTimeout(1100);
+    await expect(target).toHaveAttribute("data-selected", "true");
+    await inspectAndClose(page, target);
+    await expect(target).not.toHaveAttribute("data-selected", "true");
+    await expect(critical).toHaveAccessibleName(/непросмотрено 1/);
 
     await page.getByRole("button", { name: "Сбросить", exact: true }).click();
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -305,8 +340,11 @@ test("D30 группирует звук, показывает точную кр�
     await near.click();
     const slaCard = page.locator(`#queue-near [data-incident-id="${next.id}"]`);
     await expect(slaCard.locator("[data-card-title]")).toBeFocused();
-    await expect(slaCard).not.toHaveAttribute("data-pulse", "true");
+    await expect(slaCard).toHaveAttribute("data-selected", "true");
+    await expect(critical).toHaveAttribute("data-unread", "true");
+    await inspectAndClose(page, slaCard);
     await expect(critical).not.toHaveAttribute("data-unread", "true");
+    await expect(critical).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
     await expect(coordinator).not.toHaveAttribute("data-unread", "true");
     await expect(firstLabel).toHaveCount(0);
     expect(await chimes()).toBe(2);
@@ -324,7 +362,11 @@ test("D30 группирует звук, показывает точную кр�
     await expect.poll(chimes).toBe(3);
     await expect(coordinator).toHaveAccessibleName(/непросмотрено 2/);
     await coordinator.click();
-    await expect(page.locator(`#queue-coordinator [data-incident-id="${next.id}"] [data-card-title]`)).toBeFocused();
+    const nextCoordinator = page.locator(`#queue-coordinator [data-incident-id="${next.id}"]`);
+    await expect(nextCoordinator.locator("[data-card-title]")).toBeFocused();
+    await expect(nextCoordinator).toHaveAttribute("data-selected", "true");
+    await expect(coordinator).toHaveAccessibleName(/непросмотрено 2/);
+    await inspectAndClose(page, nextCoordinator);
     await expect(coordinator).toHaveAccessibleName(/непросмотрено 1/);
     expect(await chimes()).toBe(3);
 
@@ -334,9 +376,16 @@ test("D30 группирует звук, показывает точную кр�
     await expect(critical).toHaveCSS("animation-name", "none");
     await critical.click();
     const staticCard = criticalCard(reduced.id);
-    await expect(staticCard).toHaveAttribute("data-pulse", "true");
+    await expect(staticCard).toHaveAttribute("data-selected", "true");
     await expect(staticCard).toHaveCSS("animation-name", "none");
     await expect(staticCard).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
+    await writeLive(app.dataDir, JSON.stringify([...latest, { ...reduced, stateEnum: "Resolved",
+      completionDate: new Date().toISOString() }]));
+    await expect(critical.locator("strong")).toHaveText("5");
+    await page.getByRole("button", { name: /^События/ }).click();
+    await expect(journal.getByRole("listitem").getByText("Критический инцидент решён", { exact: true })).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    expect(await chimes()).toBe(4);
 
     const reset = await page.request.post(`${app.url}${API_PREFIX}/demo/reset`, {
       data: {}, headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
@@ -344,6 +393,7 @@ test("D30 группирует звук, показывает точную кр�
     expect(reset.ok()).toBe(true);
     await expect(critical.locator("strong")).toHaveText("3");
     await expect(page.locator('[data-category][data-unread="true"]')).toHaveCount(0);
+    await expect(page.locator('[data-incident-id][data-selected="true"]')).toHaveCount(0);
     await expect(page.getByRole("button", { name: "События, новых: 1" })).toBeVisible();
     expect(await chimes()).toBe(4);
   } finally {
@@ -384,14 +434,19 @@ test("D40 проверяет переходы всех тихих сегмент
 
     await writeLive(app.dataDir, JSON.stringify([first, second, ...added]));
     await unread("near");
-    await expect(title("near", added[1].id)).toHaveCount(1);
+    await expect(title("near", added[1].id)).toHaveCount(0);
+    const card = (category: string, id: string) => title(category, id).locator("..").locator("..");
     for (const { category, id } of priorityCases) {
       await unread(category);
       await metric(category).click();
       await expect(title(category, id)).toBeFocused();
-      await viewed(category);
+      await expect(card(category, id)).toHaveAttribute("data-selected", "true");
+      await unread(category);
     }
+    await inspectAndClose(page, card("medium", added[1].id));
+    await viewed("medium");
     await viewed("near");
+    await expect(card("low", added[2].id)).toHaveAttribute("data-selected", "true");
 
     await page.clock.fastForward(7 * 60_000);
     await unread("near");
@@ -407,19 +462,25 @@ test("D40 проверяет переходы всех тихих сегмент
     await viewed("near");
     await unread("overdue");
     await metric("near").click();
-    await expect(page.locator("#queue-near")).toBeFocused();
+    await expect(page.locator("#queue-near [data-sla-toggle]")).toBeFocused();
     await unread("overdue");
     await expect(title("near", second.id)).toHaveCount(0);
-    await expect(title("overdue", second.id)).toHaveCount(1);
+    await expect(title("overdue", second.id)).toHaveCount(0);
 
     await metric("overdue").click();
     await expect(title("overdue", second.id)).toBeFocused();
+    await expect(card("overdue", second.id)).toHaveAttribute("data-selected", "true");
+    await inspectAndClose(page, card("overdue", second.id));
     await unread("overdue");
     await metric("overdue").click();
     await expect(title("overdue", first.id)).toBeFocused();
+    await expect(card("overdue", first.id)).toHaveAttribute("data-selected", "true");
+    await inspectAndClose(page, card("overdue", first.id));
     await unread("overdue");
     await metric("overdue").click();
     await expect(title("overdue", added[1].id)).toBeFocused();
+    await expect(card("overdue", added[1].id)).toHaveAttribute("data-selected", "true");
+    await inspectAndClose(page, card("overdue", added[1].id));
     await viewed("overdue");
     expect(await chimes()).toBe(0);
   } finally {
