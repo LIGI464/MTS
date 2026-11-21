@@ -4,6 +4,7 @@ import {
   STATE_LABELS,
   type Incident,
   type RawIncident,
+  type RawIncidentFields,
   type State,
 } from "@mts/contracts";
 
@@ -22,11 +23,11 @@ export class InvalidIncidentFile extends Error {
   }
 }
 
-function parseIncidentBytes(bytes: Uint8Array): { raw: Record<string, unknown>[]; normalized: RawIncident[] } {
+function parseIncidentBytes(bytes: Uint8Array): { raw: RawIncidentFields[]; normalized: RawIncident[] } {
   try {
     const raw: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     const parsed = RawIncidentsSchema.safeParse(raw);
-    if (parsed.success) return { raw: raw as Record<string, unknown>[], normalized: parsed.data };
+    if (parsed.success) return { raw: raw as RawIncidentFields[], normalized: parsed.data };
   } catch {
     // Raw input may contain private data. Keep parse diagnostics out of errors and logs.
   }
@@ -66,7 +67,7 @@ export type NormalizedIncidents = {
 export type SourceRecord = {
   incident: Incident;
   description: string | null;
-  raw: Record<string, unknown>;
+  raw: RawIncidentFields;
   fingerprint: string;
 };
 

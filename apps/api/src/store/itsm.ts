@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { HistoryEntry, TicketDetail, TicketList, TicketSummary } from "@mts/contracts";
+import type { Coordinator, FullTicketDetail, HistoryEntry, RawIncidentFields, TicketList, TicketSummary } from "@mts/contracts";
 import type { SourceRecord } from "../source/input.js";
 
 type StoredTicket = Omit<TicketSummary, "version" | "present">;
@@ -24,6 +24,7 @@ function projectTicket({ incident, raw }: SourceRecord): StoredTicket {
   return {
     id, title, product, service, team, assignee, state, stateLabel, priority, createdAt, dueAt, resolvedAt,
     hasSolution: displayText(raw.solution) !== null,
+    coordinator: incident.coordinator,
   };
 }
 
@@ -48,6 +49,11 @@ export function prepareItsmArchive(database: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS itsm_incidents (
       id TEXT PRIMARY KEY,
       latest_seq INTEGER NOT NULL REFERENCES itsm_history (seq)
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS itsm_coordinator_assignments (
+      incident_id TEXT PRIMARY KEY REFERENCES itsm_incidents (id),
+      coordinator_id TEXT NOT NULL,
+      name TEXT NOT NULL
     ) STRICT;
   `);
 
@@ -74,6 +80,13 @@ export function prepareItsmArchive(database: DatabaseSync) {
     INSERT INTO itsm_incidents (id, latest_seq) VALUES (?, ?)
     ON CONFLICT (id) DO UPDATE SET latest_seq = excluded.latest_seq
   `);
+  const readAssignments = database.prepare(`
+    SELECT incident_id AS incidentId, coordinator_id AS id, name FROM itsm_coordinator_assignments
+  `);
+  const assign = database.prepare(`
+    INSERT INTO itsm_coordinator_assignments (incident_id, coordinator_id, name) VALUES (?, ?, ?)
+    ON CONFLICT (incident_id) DO UPDATE SET coordinator_id = excluded.coordinator_id, name = excluded.name
+  `);
 
   type RecordData = Pick<HistoryRow, "incidentId" | "fingerprint" | "raw" | "ticket">;
 
@@ -84,6 +97,16 @@ export function prepareItsmArchive(database: DatabaseSync) {
   }
 
   return {
+    listPresentRaw(): RawIncidentFields[] {
+      return (presentRows.all() as RecordData[]).map(({ raw }) => JSON.parse(raw) as RawIncidentFields);
+    },
+    getCoordinatorAssignments(): Map<string, Coordinator> {
+      const rows = readAssignments.all() as (Coordinator & { incidentId: string })[];
+      return new Map(rows.map(({ incidentId, ...coordinator }) => [incidentId, coordinator]));
+    },
+    assignCoordinator(id: string, coordinator: Coordinator): void {
+      assign.run(id, coordinator.id, coordinator.name);
+    },
     // Called within the same write transaction as the dashboard snapshot.
     sync(records: readonly SourceRecord[], at: string): boolean {
       const previous = new Map((presentRows.all() as RecordData[]).map((row) => [row.incidentId, row]));
@@ -92,12 +115,13 @@ export function prepareItsmArchive(database: DatabaseSync) {
         const incidentId = record.incident.id;
         const prior = previous.get(incidentId);
         previous.delete(incidentId);
-        if (prior?.fingerprint === record.fingerprint) continue;
+        const ticket = JSON.stringify(projectTicket(record));
+        if (prior?.fingerprint === record.fingerprint && prior.ticket === ticket) continue;
         append({
           incidentId,
           fingerprint: record.fingerprint,
           raw: JSON.stringify(record.raw),
-          ticket: JSON.stringify(projectTicket(record)),
+          ticket,
         }, at, 1);
         changed = true;
       }
@@ -111,25 +135,26 @@ export function prepareItsmArchive(database: DatabaseSync) {
       const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;
       return row ? { version: row.version, present: row.present === 1 } : null;
     },
-    getTicket(id: string): TicketDetail | null {
+    getTicket(id: string): FullTicketDetail | null {
       const rows = historyRows.all(id) as (SummaryRow & Pick<HistoryRow, "raw" | "at">)[];
       if (rows.length === 0) return null;
 
       const tickets = rows.map((row) => {
-        const raw = JSON.parse(row.raw) as Record<string, unknown>;
+        const rawFields = JSON.parse(row.raw) as RawIncidentFields;
         return {
           ticket: readSummary(row),
           at: row.at,
-          description: displayText(raw.description),
-          solution: displayText(raw.solution),
+          description: displayText(rawFields.description),
+          solution: displayText(rawFields.solution),
+          rawFields,
         };
       });
-      const [{ ticket, description, solution }] = tickets;
+      const [{ ticket, description, solution, rawFields }] = tickets;
       const history = tickets.map(({ ticket, at, description, solution }): HistoryEntry => {
-        const { version, present, stateLabel, team, dueAt, priority } = ticket;
-        return { version, at, present, stateLabel, team, dueAt, priority, description, solution };
+        const { version, present, stateLabel, team, coordinator, dueAt, priority } = ticket;
+        return { version, at, present, stateLabel, team, coordinator, dueAt, priority, description, solution };
       });
-      return { ticket, description, solution, history };
+      return { ticket, description, solution, history, rawFields };
     },
   };
 }

@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { COORDINATOR_TEAM, PRIORITY_LABELS, STATE_LABELS, isActiveState, type ResolveIncident, type ScenarioCommand } from "@mts/contracts";
+import { COORDINATOR_TEAM, PRIORITY_LABELS, STATE_LABELS, isActiveState, type AssignCoordinator, type ResolveIncident, type ScenarioCommand } from "@mts/contracts";
 import { resolvedFields } from "../demo/steps.js";
 import type { SourceRecord } from "../source/input.js";
 
-export type ItsmCommand = ScenarioCommand | (ResolveIncident & { action: "resolve"; id: string });
+type SourceCommand = ScenarioCommand | (ResolveIncident & { action: "resolve"; id: string });
+export type ItsmCommand = SourceCommand | (AssignCoordinator & { action: "set-coordinator"; id: string });
+type GetVersion = (id: string) => { version: string; present: boolean } | null;
 
 export class MutationError extends Error {
   constructor(readonly status: 404 | 409, readonly code: string, message: string) {
@@ -11,12 +13,19 @@ export class MutationError extends Error {
   }
 }
 
-const NOT_FOUND = "Заявка не найдена.";
+export function requireTicketVersion({ id, expectedVersion }: { id: string; expectedVersion: string }, getVersion: GetVersion): void {
+  const current = getVersion(id);
+  if (!current) throw new MutationError(404, "NOT_FOUND", "Заявка не найдена.");
+  if (!current.present) throw new MutationError(409, "TICKET_ARCHIVED", "Заявка в архиве.");
+  if (current.version !== expectedVersion) {
+    throw new MutationError(409, "VERSION_CONFLICT", "Заявка изменилась. Перечитайте карточку и повторите действие.");
+  }
+}
 
 export function planMutation(
-  command: ItsmCommand,
+  command: SourceCommand,
   records: readonly SourceRecord[],
-  getVersion: (id: string) => { version: string; present: boolean } | null,
+  getVersion: GetVersion,
   now: string,
 ): { id: string; rows: Record<string, unknown>[] } {
   const rows = records.map(({ raw }) => raw);
@@ -42,14 +51,8 @@ export function planMutation(
     return { id, rows };
   }
 
-  const { id, expectedVersion } = command;
-  const current = getVersion(id);
-  if (!current) throw new MutationError(404, "NOT_FOUND", NOT_FOUND);
-  if (!current.present) throw new MutationError(409, "TICKET_ARCHIVED", "Заявка в архиве.");
-  if (current.version !== expectedVersion) {
-    throw new MutationError(409, "VERSION_CONFLICT", "Заявка изменилась. Перечитайте карточку и повторите действие.");
-  }
-
+  requireTicketVersion(command, getVersion);
+  const { id } = command;
   const index = records.findIndex(({ incident }) => incident.id === id);
   if (index === -1 || !isActiveState(records[index].incident.state)) {
     throw new MutationError(409, "INVALID_TRANSITION", "Действие доступно для активной заявки.");

@@ -1,4 +1,4 @@
-import { API_PREFIX, ResolveIncidentSchema, ScenarioCommandSchema, type ApiError } from "@mts/contracts";
+import { API_PREFIX, AssignCoordinatorSchema, ResolveIncidentSchema, ScenarioCommandSchema, type ApiError } from "@mts/contracts";
 import type { FastifyInstance, onRequestHookHandler } from "fastify";
 import { INVALID_OPERATOR_TOKEN, isValidOperatorToken, readBearer } from "../http/operator-token.js";
 import type { RouteContext } from "../runtime-contract.js";
@@ -9,6 +9,10 @@ const OPERATOR_DISABLED = { code: "OPERATOR_DISABLED", message: "Операто�
 const INVALID_REQUEST = { code: "INVALID_REQUEST", message: "Некорректные параметры действия." } satisfies ApiError;
 
 export function registerItsmRoutes(app: FastifyInstance, { runtime, operatorToken }: RouteContext): void {
+  app.get(`${API_PREFIX}/coordinators`, async (_request, reply) => {
+    return reply.header("Cache-Control", "no-store").send(runtime.listCoordinators());
+  });
+
   app.get(incidentsPath, async (_request, reply) => {
     return reply.header("Cache-Control", "no-store").send(runtime.listTickets());
   });
@@ -38,5 +42,11 @@ export function registerItsmRoutes(app: FastifyInstance, { runtime, operatorToke
     const command = ResolveIncidentSchema.safeParse(request.body);
     if (!command.success) return reply.code(400).send(INVALID_REQUEST);
     return runtime.mutate({ ...command.data, action: "resolve", id: request.params.id });
+  });
+
+  app.post<{ Params: { id: string } }>(`${incidentsPath}/:id/coordinator`, { onRequest: requireOperator }, async (request, reply) => {
+    const command = AssignCoordinatorSchema.safeParse(request.body);
+    if (!command.success) return reply.code(400).send(INVALID_REQUEST);
+    return runtime.mutate({ ...command.data, action: "set-coordinator", id: request.params.id });
   });
 }

@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { IncidentSchema, NoticeSchema, type Incident, type MutationResult, type Notice } from "@mts/contracts";
+import { IncidentSchema, NoticeSchema, type Coordinator, type Incident, type MutationResult, type Notice } from "@mts/contracts";
 import type { SourceRecord } from "../source/input.js";
 import { prepareItsmArchive } from "./itsm.js";
 import { prepareMutationJournal, type PendingMutation } from "./mutations.js";
@@ -14,7 +14,8 @@ export type StoredDashboard = {
 
 type PendingNotice = Omit<Notice, "seq">;
 type DashboardState = Omit<StoredDashboard, "notices"> & { records: readonly SourceRecord[] };
-type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean; mutation?: PendingMutation };
+export type DashboardMutation = PendingMutation & { coordinator?: Coordinator };
+type SaveOptions = { dashboardChanged?: boolean; refreshSource?: boolean; reset?: boolean; mutation?: DashboardMutation };
 type SaveResult = Pick<StoredDashboard, "revision" | "notices"> & { mutation?: MutationResult };
 
 export type DashboardStore = {
@@ -23,6 +24,8 @@ export type DashboardStore = {
   listTickets: ReturnType<typeof prepareItsmArchive>["listTickets"];
   getTicket: ReturnType<typeof prepareItsmArchive>["getTicket"];
   getTicketVersion: ReturnType<typeof prepareItsmArchive>["getVersion"];
+  listPresentRaw: ReturnType<typeof prepareItsmArchive>["listPresentRaw"];
+  getCoordinatorAssignments: ReturnType<typeof prepareItsmArchive>["getCoordinatorAssignments"];
   mutations: Omit<ReturnType<typeof prepareMutationJournal>, "finish">;
   close(): void;
 };
@@ -119,6 +122,11 @@ export function openDashboardStore(path: string): DashboardStore {
       save(state, events, { dashboardChanged, refreshSource, reset, mutation }) {
         return transaction("BEGIN IMMEDIATE", () => {
           const { lastGoodAt, incidents, descriptions, records } = state;
+          if (mutation?.coordinator) {
+            // This mutation has only SQLite writes, so the receipt can be committed in the same transaction.
+            mutations.begin(mutation);
+            archive.assignCoordinator(mutation.id, mutation.coordinator);
+          }
           const archiveChanged = archive.sync(records, lastGoodAt);
           const changed = Boolean(dashboardChanged || archiveChanged || reset);
           if (!changed && !refreshSource && !mutation) return null;
@@ -147,6 +155,8 @@ export function openDashboardStore(path: string): DashboardStore {
       listTickets: archive.listTickets,
       getTicket: archive.getTicket,
       getTicketVersion: archive.getVersion,
+      listPresentRaw: archive.listPresentRaw,
+      getCoordinatorAssignments: archive.getCoordinatorAssignments,
       mutations,
       close() {
         database.close();

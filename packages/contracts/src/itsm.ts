@@ -1,26 +1,11 @@
 import { z } from "zod";
-import type { Incident } from "./schemas.js";
+import type { AssignCoordinatorResult, FullTicketDetail, TicketSummary } from "./incident-workflow.js";
 
-export type TicketSummary = Pick<Incident,
-  | "id" | "version" | "title" | "product" | "service" | "team" | "assignee"
-  | "state" | "stateLabel" | "priority" | "createdAt" | "dueAt" | "resolvedAt"
-> & {
-  present: boolean;
-  hasSolution?: boolean;
-};
-
-export type HistoryEntry = Pick<TicketSummary, "version" | "present" | "stateLabel" | "team" | "dueAt" | "priority"> & {
-  at: string;
-  description: string | null;
-  solution: string | null;
-};
+export type { HistoryEntry, TicketSummary } from "./incident-workflow.js";
 
 export type TicketList = { items: TicketSummary[] };
 
-export type TicketDetail = Pick<HistoryEntry, "description" | "solution"> & {
-  ticket: TicketSummary;
-  history: HistoryEntry[];
-};
+export type TicketDetail = Omit<FullTicketDetail, "rawFields"> & Partial<Pick<FullTicketDetail, "rawFields">>;
 
 const requestId = z.uuid();
 const target = { requestId, id: z.string().min(1), expectedVersion: z.string().min(1) };
@@ -43,4 +28,4 @@ export const ResolveIncidentSchema = z.strictObject({
 
 export type ScenarioCommand = z.infer<typeof ScenarioCommandSchema>;
 export type ResolveIncident = z.infer<typeof ResolveIncidentSchema>;
-export type MutationResult = { id: string; version: string; revision: number };
+export type MutationResult = AssignCoordinatorResult;
