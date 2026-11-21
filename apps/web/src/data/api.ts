@@ -2,8 +2,12 @@ import {
   API_PREFIX,
   AnalysisResultSchema,
   ApiErrorSchema,
+  AssistantChatRequestSchema,
+  AssistantChatResponseSchema,
   SnapshotSchema,
   type AnalysisResult,
+  type AssistantChatRequest,
+  type AssistantChatResponse,
   type Snapshot,
 } from "@mts/contracts";
 
@@ -28,6 +32,24 @@ export async function fetchDashboard(): Promise<Snapshot> {
   if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось загрузить снимок");
   const parsed = SnapshotSchema.safeParse(await response.json());
   if (!parsed.success) throw new DashboardRequestError("INVALID_SNAPSHOT", "Снимок не прошёл проверку");
+  return parsed.data;
+}
+
+export async function requestAssistantChat(
+  payload: AssistantChatRequest,
+  token?: string,
+): Promise<AssistantChatResponse> {
+  const parsedRequest = AssistantChatRequestSchema.parse(payload);
+  const headers = new Headers({ "content-type": "application/json" });
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_PREFIX}/assistant/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(parsedRequest),
+  });
+  if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось получить ответ помощника");
+  const parsed = AssistantChatResponseSchema.safeParse(await response.json());
+  if (!parsed.success) throw new DashboardRequestError("INVALID_ASSISTANT", "Ответ помощника не прошёл проверку");
   return parsed.data;
 }
 

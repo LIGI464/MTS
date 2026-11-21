@@ -46,7 +46,7 @@ const optionalSignal = z
   }, prioritySchema.nullable())
   .optional();
 
-const utcIso = z.string().refine((value) => normalizeUtcInstant(value) === value, "Ожидается UTC ISO");
+export const utcIso = z.string().refine((value) => normalizeUtcInstant(value) === value, "Ожидается UTC ISO");
 
 const rawIncidentShape = z.looseObject({
   id: z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().min(1)),

@@ -38,6 +38,23 @@ export {
   SnapshotSchema,
   StateSchema,
 } from "./schemas.js";
+export {
+  AssistantChatContextSchema,
+  AssistantChatModeSchema,
+  AssistantChatRequestSchema,
+  AssistantChatResponseSchema,
+  AssistantSearchStatusSchema,
+  AssistantSimilarIncidentSchema,
+  AssistantSourceSchema,
+} from "./assistant.js";
+export type {
+  AssistantChatContext,
+  AssistantChatMode,
+  AssistantChatRequest,
+  AssistantChatResponse,
+  AssistantSearchStatus,
+  AssistantSimilarIncident,
+} from "./assistant.js";
 export type {
   AnalysisResult,
   ApiError,
