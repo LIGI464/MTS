@@ -351,6 +351,82 @@ test("D30 группирует звук, показывает точную кр�
   }
 });
 
+test("D40 проверяет переходы всех тихих сегментов и устаревшую цель SLA", async ({ page }) => {
+  const chimes = await mockAudio(page);
+  const [demo]: RawIncidentFields[] = JSON.parse(await readFile("data/demo/character_problems.json", "utf8"));
+  const now = Date.now();
+  const time = (minutes: number) => new Date(now + minutes * 60_000).toISOString();
+  const base = { ...demo, assignedEmployee: null, submitDate: time(-240), deadline: null, priorityId: 3 };
+  const first = { ...base, id: "INC-D40-SLA-01", header: "Контроль срока 1", deadline: time(35) };
+  const second = { ...base, id: "INC-D40-SLA-02", header: "Контроль срока 2", deadline: time(36) };
+  const priorityCases = [
+    { category: "high", id: "INC-D40-HIGH", priority: 3 },
+    { category: "medium", id: "INC-D40-MEDIUM", priority: 2 },
+    { category: "low", id: "INC-D40-LOW", priority: 1 },
+  ];
+  const added = priorityCases.map(({ id, priority }) => ({
+    ...base, id, header: id, priorityId: priority, deadline: priority === 2 ? time(15) : null,
+  }));
+  const app = await startDashboard("rules", "", { incidents: [first, second] });
+  try {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.install({ time: now });
+    await page.goto(`${app.url}/admin/incidents`);
+    const metric = (category: string) => page.locator(`[data-category="${category}"]`);
+    const title = (category: string, id: string) =>
+      page.locator(`#queue-${category} [data-incident-id="${id}"] [data-card-title]`);
+    const unread = (category: string) => expect(metric(category)).toHaveAttribute("data-unread", "true");
+    const viewed = (category: string) => expect(metric(category)).not.toHaveAttribute("data-unread", "true");
+    const sound = page.getByRole("button", { name: "Звук оповещений" });
+    await expect(page.getByText("Данные актуальны", { exact: true })).toBeVisible();
+    await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "true");
+
+    await writeLive(app.dataDir, JSON.stringify([first, second, ...added]));
+    await unread("near");
+    await expect(title("near", added[1].id)).toHaveCount(1);
+    for (const { category, id } of priorityCases) {
+      await unread(category);
+      await metric(category).click();
+      await expect(title(category, id)).toBeFocused();
+      await viewed(category);
+    }
+    await viewed("near");
+
+    await page.clock.fastForward(7 * 60_000);
+    await unread("near");
+    await expect(metric("near").locator("strong")).toHaveText("3");
+    await metric("near").focus();
+    await page.keyboard.press("Enter");
+    await expect(title("near", second.id)).toBeFocused();
+    await unread("near");
+    await expect(title("high", second.id)).toHaveCount(1);
+
+    await page.clock.fastForward(30 * 60_000);
+    await expect(metric("near").locator("strong")).toHaveText("0");
+    await viewed("near");
+    await unread("overdue");
+    await metric("near").click();
+    await expect(page.locator("#queue-near")).toBeFocused();
+    await unread("overdue");
+    await expect(title("near", second.id)).toHaveCount(0);
+    await expect(title("overdue", second.id)).toHaveCount(1);
+
+    await metric("overdue").click();
+    await expect(title("overdue", second.id)).toBeFocused();
+    await unread("overdue");
+    await metric("overdue").click();
+    await expect(title("overdue", first.id)).toBeFocused();
+    await unread("overdue");
+    await metric("overdue").click();
+    await expect(title("overdue", added[1].id)).toBeFocused();
+    await viewed("overdue");
+    expect(await chimes()).toBe(0);
+  } finally {
+    await app.stop();
+  }
+});
+
 test("события можно закрепить, отфильтровать и открепить после перезагрузки", async ({ page }) => {
   const app = await startDashboard();
   try {
