@@ -355,6 +355,11 @@ input {
   }
 }
 
+body[data-assistant-shift="true"] .detail {
+  right: calc(16px + var(--assistant-width) + var(--assistant-gap));
+  width: min(100% - 32px - var(--assistant-width) - var(--assistant-gap), 480px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast, .overlay, .detail { animation: none; }
 }

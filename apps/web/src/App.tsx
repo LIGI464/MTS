@@ -1,6 +1,7 @@
 import type { Notice, Snapshot } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AssistantHost } from "./assistant";
 import { IncidentBoard } from "./board";
 import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
@@ -32,6 +33,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   sound: ReturnType<typeof useIncidentSound>;
 }) {
   const [selection, setSelection] = useState<{ id: string; attentionKey?: string } | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
@@ -148,10 +150,17 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       ) : null}
       {selection ? (
         <IncidentDetails key={selection.id} id={selection.id} incident={selected}
-          nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision} operatorToken={operatorToken}
-          runAnalysis={dashboard.runAnalysis} onShown={detailOpened}
+          nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision}
+          onShown={detailOpened} assistantEscape={assistantOpen}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
+      <AssistantHost
+        detailsOpen={Boolean(selection)}
+        incident={selected}
+        operatorToken={operatorToken}
+        requestChat={dashboard.requestAssistantChat}
+        onOpenChange={setAssistantOpen}
+      />
     </AppShell>
   );
 }

@@ -1,8 +1,7 @@
-import type { AnalysisResult, FullTicketDetail, Incident, RawIncidentFields } from "@mts/contracts";
+import type { FullTicketDetail, Incident, RawIncidentFields } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
-import { AnalysisPanel } from "../analysis";
 import { detailQuery, type IncidentClient } from "../data/incidents";
 import { Icon } from "../icons";
 import { CoordinatorValue } from "./coordinator";
@@ -37,17 +36,16 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, onShown, onClose, onReturnFocus }: {
+export function IncidentDetails({ id, incident, nowMs, client, revision, onShown, onClose, onReturnFocus, assistantEscape }: {
   id: string;
   incident: Incident | undefined;
   nowMs: number;
   client: IncidentClient;
   revision?: number;
-  operatorToken?: string;
-  runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
   onShown: () => void;
   onClose: () => void;
   onReturnFocus: () => void;
+  assistantEscape?: boolean;
 }) {
   const detail = useQuery({ ...detailQuery(client, id, incident?.version, revision), refetchOnMount: "always" });
   const record = detail.data;
@@ -64,7 +62,8 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className={`detail ${styles.panel}`} data-surface="surface"
-          onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus(); }}>
+          onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus(); }}
+          onEscapeKeyDown={(event) => { if (assistantEscape) event.preventDefault(); }}>
           <div className="detail-heading">
             <div>
               <Dialog.Description className="detail-id" data-numeric="tabular">{id}</Dialog.Description>
@@ -97,7 +96,6 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, operato
             В ITSM <Icon name="box-arrow-up-right" />
           </a>
           {record ? <FullRecord detail={record} /> : null}
-          {incident ? <AnalysisPanel incident={incident} runAnalysis={runAnalysis} operatorToken={operatorToken} /> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

@@ -1,15 +1,18 @@
 import {
   API_PREFIX,
   AnalysisResultSchema,
+  AssistantChatResponseSchema,
   SnapshotSchema,
   type AnalysisResult,
+  type AssistantChatRequest,
+  type AssistantChatResponse,
   type Notice,
   type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFrameState } from "./apply";
-import { fetchDashboard, requestAnalysis, requestReset } from "./api";
+import { fetchDashboard, requestAnalysis, requestAssistantChat, requestReset } from "./api";
 import { createIncidentFixtures } from "./incident-fixtures";
 import { incidentApi, type IncidentClient } from "./incidents";
 
@@ -26,6 +29,7 @@ export function useDashboard(): {
   newNotices: Notice[];
   dismissNotice: (seq: number) => void;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
+  requestAssistantChat: (payload: AssistantChatRequest, token?: string) => Promise<AssistantChatResponse>;
   resetDemo: (token: string) => Promise<Snapshot>;
   stepMock?: (step: DemoStep) => void;
 } {
@@ -111,6 +115,55 @@ export function useDashboard(): {
     setFrame(next);
   }, []);
 
+  async function requestAssistant(
+    payload: AssistantChatRequest,
+    token?: string,
+  ): Promise<AssistantChatResponse> {
+    if (!mockMode) return requestAssistantChat(payload, token);
+    const now = new Date().toISOString();
+  const incident = payload.context.incidentId
+      ? frameRef.current.snapshot?.incidents.find((item) => item.id === payload.context.incidentId)
+      : undefined;
+    const question = payload.question.trim();
+    if (payload.mode === "dashboard" && !question && !payload.context.symptoms) {
+      return AssistantChatResponseSchema.parse({
+        mode: "dashboard",
+        status: "needs_context",
+        evaluatedAt: now,
+        source: "rules",
+        reason: "rules_mode",
+        context: payload.context,
+        summary: "Укажите ID инцидента или опишите симптомы.",
+        nextSteps: ["Введите номер инцидента или опишите симптомы в одном сообщении."],
+        matches: [],
+      });
+    }
+    return AssistantChatResponseSchema.parse({
+      mode: payload.mode,
+      status: incident || question ? "answered" : "no_matches",
+      evaluatedAt: now,
+      source: "rules",
+      reason: "rules_mode",
+      context: payload.context,
+      summary: incident
+        ? `Для ${incident.id} найден один завершённый пример в демонстрационных данных.`
+        : "Подходящих завершённых инцидентов не найдено.",
+      nextSteps: ["Проверьте шаги из карточки аналога."],
+      matches: incident ? [{
+        id: "INC-HISTORY",
+        version: "mock",
+        title: "Устранённая неисправность",
+        state: "Resolved",
+        resolvedAt: "2026-05-21T06:00:00.000Z",
+        present: true,
+        symptom: "Похожий симптом",
+        solution: "Повторили действия из прошлого случая.",
+        reason: "Совпадают признаки сбоя.",
+        href: "/itsm/incidents/INC-HISTORY",
+      }] : [],
+    });
+  }
+
   async function runAnalysis(id: string, token?: string): Promise<AnalysisResult> {
     if (!mockMode) return requestAnalysis(id, token);
     const incident = frameRef.current.snapshot?.incidents.find((item) => item.id === id);
@@ -148,6 +201,7 @@ export function useDashboard(): {
     newNotices: frame.visible,
     dismissNotice,
     runAnalysis,
+    requestAssistantChat: requestAssistant,
     resetDemo,
   };
   return mockMode ? { ...value, stepMock } : value;
