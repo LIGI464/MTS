@@ -153,7 +153,7 @@ describe("dashboard priorities", () => {
   it.each(["foreign", "duplicate", "wrong-version", "unsupported-evidence", "offline"])(
     "falls back to accepted facts on %s",
     async (badOutput) => {
-      mockProvider((entries) => {
+      const provider = mockProvider((entries) => {
         if (badOutput === "offline") return new Response("offline", { status: 503 });
         const items = modelRows(entries);
         const changes = {
@@ -170,6 +170,11 @@ describe("dashboard priorities", () => {
       expect(feed.source).toBe("rules");
       expect(feed.fallback).toBe(badOutput === "offline" ? "provider_error" : "invalid_output");
       expect(feed.descriptions.every(({ text }) => text === NO_INCIDENT_DESCRIPTION)).toBe(true);
+      app.setTime(at(5));
+      const overdue = PriorityFeedSchema.parse((await app.liveFeed()).json());
+      expect(overdue.recommendations.find(({ incidentId }) => incidentId === "NEAR")?.sla).toBe("overdue");
+      expect(overdue.fallback).toBe(feed.fallback);
+      expect(provider).toHaveBeenCalledTimes(1);
     },
   );
 

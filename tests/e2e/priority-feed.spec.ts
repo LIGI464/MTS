@@ -104,6 +104,7 @@ test("P30 убирает устаревшую позицию при обновл
     await page.goto(app.url + "/admin/incidents");
     const deleted = incidents[0]!;
     const changed = incidents[4]!;
+    const symptom = "Операторы с задержкой видят результаты проверки заказов.";
     const added = { ...deleted, id: "INC-PR-FRESH", header: "Недоступны кассы", impactId: 4,
       shortDescription: "Все операторы не могут завершить оплату в кассах." };
     await expect(recommendation(page, deleted.id)).toBeVisible();
@@ -114,17 +115,26 @@ test("P30 убирает устаревшую позицию при обновл
       await route.continue();
     });
     const updated = incidents.slice(1).map((incident) =>
-      incident.id === changed.id ? { ...incident, header: "Новая версия проверки заказов" } : incident);
+      incident.id === changed.id ? { ...incident, header: "Новая версия проверки заказов", shortDescription: symptom } : incident);
     await writeLive(app.dataDir, JSON.stringify([...updated, added]));
     await requestStarted.promise;
     await expect(recommendation(page, deleted.id)).toHaveCount(0);
     await expect(recommendation(page, changed.id)).toHaveCount(0);
     await expect(recommendation(page, incidents[1]!.id)).toBeVisible();
     await expect(feed(page).getByRole("status")).toHaveText("Обновляем рекомендации…");
+    const changedCard = page.locator(`#queue-high [data-incident-id="${changed.id}"]`);
+    await expect(changedCard.getByText(symptom, { exact: true })).toBeVisible();
     release.resolve();
     await expect(recommendation(page, changed.id)).toContainText("Новая версия проверки заказов");
     await expect(feed(page).getByRole("button").first()).toContainText(added.id);
     await expect(recommendation(page, added.id)).toBeInViewport({ ratio: .95 });
+    await expect(changedCard.getByText(symptom, { exact: true })).toBeVisible();
+    await page.unroute(`**${priorityPath}`);
+    await page.route(`**${priorityPath}`, (route) => route.abort());
+    await writeLive(app.dataDir, JSON.stringify(updated));
+    await expect(feed(page).getByRole("status")).toHaveText("Не удалось обновить рекомендации.");
+    await expect(recommendation(page, added.id)).toHaveCount(0);
+    await expect(recommendation(page, changed.id)).toContainText("Новая версия проверки заказов");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.locator(".toasts")).toHaveCount(0);
   } finally {

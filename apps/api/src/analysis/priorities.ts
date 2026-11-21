@@ -110,11 +110,13 @@ export function registerPriorityFeed(app: FastifyInstance, { runtime, env, opera
     const snapshot = runtime.getSnapshot();
     const nowMs = Date.parse(snapshot.serverNow);
     const hit = cached.get(useLive);
-    if (hit?.key === cacheKey(snapshot, nowMs) && Date.now() < hit.retryAt) return hit.value;
+    const hitIsFresh = hit && Date.now() < hit.retryAt;
+    if (hitIsFresh && hit.key === cacheKey(snapshot, nowMs)) return hit.value;
 
     const facts = factsFor(snapshot);
-    let fallback: PriorityFeed["fallback"] = null;
-    if (useLive && snapshot.incidents.length) {
+    const retry = hitIsFresh && hit.value.revision === snapshot.revision && hit.value.fallback ? hit : undefined;
+    let fallback: PriorityFeed["fallback"] = retry?.value.fallback ?? null;
+    if (useLive && !retry && snapshot.incidents.length) {
       if (active && active.revision !== snapshot.revision) await active.done;
       if (runtime.getSnapshot().revision !== snapshot.revision) return reply.code(409).send(SNAPSHOT_CHANGED);
       const work = active ?? start(snapshot, facts);
@@ -129,7 +131,7 @@ export function registerPriorityFeed(app: FastifyInstance, { runtime, env, opera
     if (completed?.key === key && Date.now() < completed.retryAt) return completed.value;
 
     const result = buildPriorityFeed(current, evaluatedMs, facts, useLive ? validAnnotations(current) : undefined, fallback);
-    cached.set(useLive, { key, value: result, retryAt: fallback ? Date.now() + RETRY_MS : Infinity });
+    cached.set(useLive, { key, value: result, retryAt: retry?.retryAt ?? (fallback ? Date.now() + RETRY_MS : Infinity) });
     return result;
   });
 }

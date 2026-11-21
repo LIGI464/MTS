@@ -379,6 +379,13 @@ test("P20 группирует звук, сохраняет точную под�
     await expect(staticCard).toHaveAttribute("data-selected", "true");
     await expect(staticCard).toHaveCSS("animation-name", "none");
     await expect(staticCard).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
+    await writeLive(app.dataDir, JSON.stringify([...latest, { ...reduced, stateEnum: "Resolved",
+      completionDate: new Date().toISOString() }]));
+    await expect(critical.locator("strong")).toHaveText("5");
+    await page.getByRole("button", { name: /^События/ }).click();
+    await expect(journal.getByRole("listitem").getByText("Критический инцидент решён", { exact: true })).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    expect(await chimes()).toBe(4);
 
     const reset = await page.request.post(`${app.url}${API_PREFIX}/demo/reset`, {
       data: {}, headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
