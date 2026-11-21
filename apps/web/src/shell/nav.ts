@@ -19,7 +19,7 @@ export const brandLabel = "goida-code · Кейс МТС";
 export const workLinks = [
   { label: "Пульт", href: "/admin/incidents" },
   { label: "Реестр ITSM", href: "/itsm/incidents" },
-  { label: "Разработчикам", href: "/dev" },
+  { label: "Разработчикам", href: "/admin/developers" },
 ] as const;
 
 export const audienceMenus: NavMenu[] = [
@@ -147,7 +147,7 @@ export const footerMenus: NavMenu[] = [
     id: "footer-dev",
     label: "Разработка",
     description: "Сценарии стенда.",
-    items: [{ label: "Сценарии", href: "/dev" }],
+    items: [{ label: "Сценарии", href: "/admin/developers" }],
   },
   {
     id: "footer-connection",

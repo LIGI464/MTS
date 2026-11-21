@@ -38,7 +38,7 @@ test("D11 показывает пульт, меню и общий адрес ITS
 
   await expect(page.getByRole("link", { name: "Пульт", exact: true }).first()).toHaveAttribute("href", "/admin/incidents");
   await expect(page.getByRole("link", { name: "Реестр ITSM" }).first()).toHaveAttribute("href", "/itsm/incidents");
-  await expect(page.getByRole("link", { name: "Разработчикам" }).first()).toHaveAttribute("href", "/dev");
+  await expect(page.getByRole("link", { name: "Разработчикам" }).first()).toHaveAttribute("href", "/admin/developers");
 
   for (const name of GROUPS) {
     const region = page.getByRole("region", { name, exact: true });
