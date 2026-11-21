@@ -1,18 +1,25 @@
 import type { Snapshot } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useRef, useState } from "react";
+import { ImportDialog } from "./import-dialog";
 import { isTokenError, reduceReset, type ResetView } from "./state";
 import styles from "./demo.module.css";
 
 export function DemoControls({
   enabled,
   liveAnalysis,
+  importEnabled,
+  sseRevision,
+  reconnecting,
   operatorToken,
   onOperatorToken,
   onReset,
 }: {
   enabled: boolean;
   liveAnalysis: boolean;
+  importEnabled: boolean;
+  sseRevision: number | null;
+  reconnecting: boolean;
   operatorToken: string | undefined;
   onOperatorToken: (token: string | undefined) => void;
   onReset: (token: string) => Promise<Snapshot>;
@@ -20,7 +27,7 @@ export function DemoControls({
   const [resetState, setResetState] = useState<ResetView>({ phase: "idle", message: null });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const pendingRef = useRef(false);
-  if (!enabled && !liveAnalysis) return null;
+  if (!enabled && !liveAnalysis && !importEnabled) return null;
 
   async function confirmReset() {
     if (pendingRef.current || resetState.phase === "pending") return;
@@ -66,6 +73,7 @@ export function DemoControls({
         <button type="button" onClick={() => onOperatorToken(undefined)}>
           Очистить
         </button>
+        {importEnabled ? <ImportDialog operatorToken={operatorToken} sseRevision={sseRevision} reconnecting={reconnecting} /> : null}
         {enabled ? (
           <Dialog.Root
             open={confirmOpen}

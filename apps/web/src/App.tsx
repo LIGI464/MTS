@@ -6,6 +6,7 @@ import { IncidentBoard } from "./board";
 import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
 import { useDashboard, type DemoStep } from "./data";
+import { fetchImportAvailability } from "./data/import-api";
 import { coordinatorQuery } from "./data/incidents";
 import { DemoControls } from "./demo";
 import { ActivityPanel } from "./operations/activity-panel";
@@ -33,6 +34,12 @@ export function App() {
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
   const selected = incidents.find(({ id }) => id === selection?.id);
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
+  const importAvailability = useQuery({
+    queryKey: ["incident-import-availability"],
+    enabled: Boolean(snapshot) && dashboard.connection !== "mock",
+    queryFn: ({ signal }) => fetchImportAvailability(signal),
+    staleTime: 60_000,
+  });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient);
   const summary = summarizeQueues(incidents, dashboard.nowMs);
   const { events, alert, highlight, unreadCount, markRead } = useIncidentAlerts(snapshot, dashboard.newNotices);
@@ -82,7 +89,8 @@ export function App() {
         <>
           <DemoControls enabled={snapshot?.capabilities.demoReset ?? false}
             liveAnalysis={snapshot?.capabilities.liveAnalysis ?? false} operatorToken={operatorToken}
-            onOperatorToken={setOperatorToken} onReset={dashboard.resetDemo} />
+            importEnabled={importAvailability.data === true} sseRevision={dashboard.sseRevision}
+            reconnecting={dashboard.connection === "reconnecting"} onOperatorToken={setOperatorToken} onReset={dashboard.resetDemo} />
           {dashboard.stepMock ? (
             <div className="mock-steps">
               {STEPS.map(([step, label]) => (
