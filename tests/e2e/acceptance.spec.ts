@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { applyDemoStep, OPERATOR_TOKEN, readLive, removeLive, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
 
-const GROUPS = ["Критические", "У координаторов", "Высокий приоритет", "Исследование"] as const;
+const GROUPS = ["Критические", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
 const HIGH_ID = "INC000000000001";
 const OTHER_ID = "INC000000000002";
 const RESEARCH_ID = "INC000000000004";
@@ -57,15 +57,15 @@ test("A1 показывает четыре группы и обе точки в�
   await expect(incident.getByText("В сроке")).toBeVisible();
 });
 
-test("A2 показывает один ID в двух группах, включая Research", async ({ page }) => {
+test("A2 показывает Research по фильтру в одной очереди", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app);
-  const research = card(page, "Исследование", RESEARCH_ID);
-  const coordinators = card(page, "У координаторов", RESEARCH_ID);
+  await expect(page.locator(`[data-incident-id="${RESEARCH_ID}"]`)).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Статус", exact: true }).selectOption("Research");
+  const research = card(page, "Средний приоритет", RESEARCH_ID);
   await expect(research).toBeVisible();
-  await expect(coordinators).toBeVisible();
+  await expect(page.locator(`[data-incident-id="${RESEARCH_ID}"]`)).toHaveCount(1);
   await expect(research.getByText("Каталог услуг")).toBeVisible();
-  await expect(coordinators.getByText("Каталог услуг")).toBeVisible();
   await expect(research.getByText(/Решён · исследование/)).toBeVisible();
   await expect(research.locator("[title='Срок не задан']")).toBeVisible();
 });
@@ -81,12 +81,8 @@ test("A3–A6 и A11 проводят critical, assign, deadline, resolve и с�
   await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
 
   applyDemoStep(app.dataDir, "assign");
-  const assigned = card(page, "У координаторов", HIGH_ID);
-  await expect(assigned).toBeVisible();
-  await expect(critical.getByText("Каталог услуг")).toBeVisible();
-  await expect(assigned.getByText("Каталог услуг")).toBeVisible();
   await expect(critical.getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
-  await expect(assigned.getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
+  await expect(page.locator(`[data-incident-id="${HIGH_ID}"]`)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
 
@@ -99,10 +95,9 @@ test("A3–A6 и A11 проводят critical, assign, deadline, resolve и с�
   applyDemoStep(app.dataDir, "resolve");
   await expect(group(page, "Критические").getByText(HIGH_ID)).toHaveCount(0);
   await expect(page.locator(".toasts").getByText(`Критический инцидент решён ${HIGH_ID}`)).toHaveCount(1);
-  await card(page, "Высокий приоритет", OTHER_ID).getByRole("button", { name: "Детали" }).click();
-  await page.getByRole("tab", { name: "История" }).click();
-  await expect(page.getByRole("tabpanel").getByText(HIGH_ID)).toBeVisible();
-  await closeDetails(page);
+  await page.getByRole("combobox", { name: "Статус", exact: true }).selectOption("Resolved");
+  await expect(critical).toBeVisible();
+  await page.getByRole("button", { name: "Сбросить", exact: true }).click();
 
   const reset = page.getByRole("button", { name: "Сбросить демо" });
   await expect(reset).toBeHidden();
@@ -167,7 +162,7 @@ test("A7 показывает локальные правила, мок codex.sa
 test("A8 открывает ITSM по шаблону и локальный адрес без него", async ({ page }) => {
   const linked = await openApp("rules", "https://itsm.example/incidents/{id}");
   await openDashboard(page, linked);
-  const link = card(page, "У координаторов", "INC000000000003").getByRole("link", { name: "В ITSM" });
+  const link = card(page, "Средний приоритет", "INC000000000003").getByRole("link", { name: "В ITSM" });
   await expect(link).toHaveAttribute("href", "https://itsm.example/incidents/INC000000000003");
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -184,7 +179,7 @@ test("A8 открывает ITSM по шаблону и локальный ад�
   await expect(popup).toHaveURL("https://itsm.example/incidents/INC000000000003");
   await expect(popup.getByText("INC000000000003")).toBeVisible();
   await popup.close();
-  await card(page, "У координаторов", "INC000000000003").getByRole("button", { name: "Детали" }).click();
+  await card(page, "Средний приоритет", "INC000000000003").getByRole("button", { name: "Подробнее" }).click();
   await expect(page.getByRole("dialog").getByRole("link", { name: "В ITSM" })).toHaveAttribute(
     "href",
     "https://itsm.example/incidents/INC000000000003",
@@ -192,11 +187,11 @@ test("A8 открывает ITSM по шаблону и локальный ад�
 
   const local = await openApp();
   await openDashboard(page, local);
-  const localCard = card(page, "У координаторов", "INC000000000003");
+  const localCard = card(page, "Средний приоритет", "INC000000000003");
   const localHref = "/itsm/incidents/INC000000000003";
   await expect(localCard.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", localHref);
   await expect(localCard.getByRole("link", { name: "В ITSM" })).toHaveAttribute("target", "_blank");
-  await localCard.getByRole("button", { name: "Детали" }).click();
+  await localCard.getByRole("button", { name: "Подробнее" }).click();
   await expect(page.getByRole("dialog").getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", localHref);
   await expect(page.getByText("Ссылка ITSM не настроена")).toHaveCount(0);
 });
@@ -242,7 +237,7 @@ test("A10 после обрыва SSE не повторяет оповещени
   applyDemoStep(app.dataDir, "assign");
   await app.resume();
   await expect(page.getByText("Данные актуальны")).toBeVisible();
-  await expect(card(page, "У координаторов", HIGH_ID)).toBeVisible();
+  await expect(card(page, "Критические", HIGH_ID).getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
   await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
 });
@@ -286,7 +281,7 @@ test("A13 сохраняет рабочую навигацию и служебн
   await footer.getByText("Служебное", { exact: true }).click();
   await expect(footer.getByLabel("Токен оператора")).toBeVisible();
 
-  const details = card(page, "Высокий приоритет", HIGH_ID).getByRole("button", { name: "Детали" });
+  const details = card(page, "Высокий приоритет", HIGH_ID).getByRole("button", { name: "Подробнее" });
   await details.click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -303,6 +298,6 @@ async function closeDetails(page: Page): Promise<void> {
 }
 
 async function analyze(page: Page, groupName: string, id: string): Promise<void> {
-  await card(page, groupName, id).getByRole("button", { name: "Детали" }).click();
+  await card(page, groupName, id).getByRole("button", { name: "Подробнее" }).click();
   await page.getByRole("button", { name: "ИИ-анализ" }).click();
 }

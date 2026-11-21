@@ -50,23 +50,28 @@ test("лента и звук реагируют на новый инцидент
       priorityId: 3,
     });
     await writeLive(app.dataDir, JSON.stringify(rows));
-    const feed = page.getByRole("complementary", { name: "События" });
-    await expect(feed.getByText("Новый инцидент", { exact: true })).toHaveCount(1);
+    const trigger = page.getByRole("button", { name: "События, новых: 1" });
+    await expect(trigger).toBeVisible();
     await expect.poll(notes).toBe(2);
 
     await app.halt();
     await expect(page.getByText("Переподключение")).toBeVisible();
     await app.resume();
     await expect(page.getByText("Данные актуальны")).toBeVisible();
-    await expect(feed.getByText("Новый инцидент", { exact: true })).toHaveCount(1);
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    const feed = page.getByRole("dialog", { name: "События" });
+    await expect(feed.getByRole("listitem").getByText("Новый инцидент", { exact: true })).toHaveCount(1);
     expect(await notes()).toBe(2);
     await page.screenshot({ path: testInfo.outputPath("dashboard-events.png") });
 
     await feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", { name: "Новый тестовый инцидент в витрине" });
     await expect(dialog.getByText("INC001000000001")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "События", exact: true })).toBeFocused();
 
     await sound.click();
     await expect(sound).toHaveAttribute("aria-pressed", "false");
@@ -79,11 +84,11 @@ test("показатели сводки фильтруют очереди и в�
   await page.goto("/admin/incidents");
   const summary = page.getByRole("group", { name: "Сводка инцидентов" });
   const high = page.getByRole("region", { name: "Высокий приоритет", exact: true });
-  await expect(high.locator("article")).toHaveCount(2);
+  await expect(high.locator("article")).toHaveCount(5);
   const picker = summary.getByRole("button", { name: /Критические/ });
   await picker.click();
   await expect(picker).toHaveAttribute("aria-pressed", "true");
   await expect(high.getByText("Нет инцидентов")).toBeVisible();
-  await page.getByRole("button", { name: "Показать все" }).click();
-  await expect(high.locator("article")).toHaveCount(2);
+  await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+  await expect(high.locator("article")).toHaveCount(5);
 });

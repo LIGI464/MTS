@@ -1,13 +1,13 @@
 import type { Notice, Snapshot } from "@mts/contracts";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { activityEvents, createActivityState, updateActivity } from "./activity";
 
 const HIGHLIGHT_MS = 2500;
 
 export function useIncidentAlerts(snapshot: Snapshot | null, liveNotices: readonly Notice[]) {
   const [activity, accept] = useReducer(
-    (state: ReturnType<typeof createActivityState>, input: { snapshot: Snapshot; liveNotices: readonly Notice[] }) =>
-      updateActivity(state, input.snapshot, input.liveNotices),
+    (state: ReturnType<typeof createActivityState>, input: { snapshot: Snapshot; liveNotices: readonly Notice[] } | "read") =>
+      input === "read" ? { ...state, unread: new Set<string>() } : updateActivity(state, input.snapshot, input.liveNotices),
     undefined,
     createActivityState,
   );
@@ -25,5 +25,6 @@ export function useIncidentAlerts(snapshot: Snapshot | null, liveNotices: readon
   }, [alert]);
 
   const events = useMemo(() => activityEvents(activity), [activity]);
-  return { events, alert, highlight: alert && alert.sequence !== expired ? alert : null };
+  const markRead = useCallback(() => accept("read"), []);
+  return { events, alert, unreadCount: activity.unread.size, markRead, highlight: alert && alert.sequence !== expired ? alert : null };
 }

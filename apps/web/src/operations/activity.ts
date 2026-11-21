@@ -19,6 +19,7 @@ export type ActivityState = {
   knownIds: ReadonlySet<string> | null;
   noticeWatermark: number;
   addedEvents: ActivityEvent[];
+  unread: ReadonlySet<string>;
   alert: IncidentAlert | null;
   sequence: number;
 };
@@ -31,6 +32,7 @@ export function createActivityState(): ActivityState {
     knownIds: null,
     noticeWatermark: -1,
     addedEvents: [],
+    unread: new Set(),
     alert: null,
     sequence: 0,
   };
@@ -44,7 +46,8 @@ export function updateActivity(
   if (state.snapshot === snapshot) return state;
 
   const hasBaseline = state.snapshot !== null;
-  const fresh = hasBaseline ? liveNotices.filter((notice) => notice.seq > state.noticeWatermark) : [];
+  const incoming = new Map([...snapshot.notices, ...liveNotices].map((notice) => [notice.seq, notice]));
+  const fresh = hasBaseline ? [...incoming.values()].filter((notice) => notice.seq > state.noticeWatermark) : [];
   const reset = fresh.some((notice) => notice.kind === "demo.reset");
   const healthy = snapshot.source.status === "ok";
   const knownIds = healthy ? new Set(snapshot.incidents.map(({ id }) => id)) : state.knownIds;
@@ -54,7 +57,7 @@ export function updateActivity(
   const criticalIds = new Set(critical.map(({ incidentId }) => incidentId));
   const previouslyKnown = state.knownIds;
   const added = healthy && previouslyKnown && !reset
-    ? snapshot.incidents.filter(({ id }) => !previouslyKnown.has(id))
+    ? [...new Map(snapshot.incidents.map((incident) => [incident.id, incident])).values()].filter(({ id }) => !previouslyKnown.has(id))
     : [];
   const addedEvents = added.filter(({ id }) => !criticalIds.has(id)).map(({ id, title }): ActivityEvent => ({
     key: `added:${snapshot.revision}:${id}`,
@@ -71,7 +74,7 @@ export function updateActivity(
     ...addedEvents.map(({ key }) => key),
   ]);
 
-  return {
+  const next: ActivityState = {
     snapshot,
     knownIds,
     noticeWatermark: Math.max(
@@ -82,7 +85,14 @@ export function updateActivity(
     addedEvents: reset ? [] : [...addedEvents, ...state.addedEvents].slice(0, EVENT_LIMIT),
     alert: reset ? null : hasAlert ? { sequence, incidentIds, eventKeys } : state.alert,
     sequence,
+    unread: new Set([
+      ...(reset ? [] : state.unread),
+      ...fresh.map(({ seq }) => `notice:${seq}`),
+      ...addedEvents.map(({ key }) => key),
+    ]),
   };
+  const visibleUnread = activityEvents(next).filter(({ key }) => next.unread.has(key));
+  return { ...next, unread: new Set(visibleUnread.map(({ key }) => key)) };
 }
 
 export function activityEvents(state: ActivityState): ActivityEvent[] {
@@ -90,7 +100,6 @@ export function activityEvents(state: ActivityState): ActivityEvent[] {
     .toReversed()
     .map((notice) => ({ ...notice, key: `notice:${notice.seq}` }));
 
-  return [...fromServer, ...state.addedEvents]
-    .sort((first, second) => second.at.localeCompare(first.at))
-    .slice(0, EVENT_LIMIT);
+  const unique = new Map([...fromServer, ...state.addedEvents].map((event) => [event.key, event]));
+  return [...unique.values()].sort((first, second) => second.at.localeCompare(first.at)).slice(0, EVENT_LIMIT);
 }

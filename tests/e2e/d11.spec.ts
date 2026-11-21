@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { startDashboard, type RunningApp } from "./support/harness.js";
 
-const GROUPS = ["Критические", "У координаторов", "Высокий приоритет", "Исследование"] as const;
+const GROUPS = ["Критические", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
 const LOCAL_ID = "INC000000000003";
 
 test.afterEach(async () => {
@@ -39,7 +39,7 @@ test("D11 показывает пульт, навигацию проекта и 
   for (const name of GROUPS) {
     const region = page.getByRole("region", { name, exact: true });
     await expect(region.getByRole("heading", { name, exact: true })).toBeInViewport();
-    if (name === "Критические") {
+    if (name === "Критические" || name === "Низкий приоритет") {
       await expect(region.getByText("Нет инцидентов")).toBeInViewport();
     } else {
       await expect(region.locator("article").first()).toBeInViewport();
@@ -47,11 +47,11 @@ test("D11 показывает пульт, навигацию проекта и 
   }
   await page.screenshot({ path: testInfo.outputPath("pult-1440x900.png") });
 
-  const card = page.getByRole("region", { name: "У координаторов", exact: true }).locator("article").filter({ hasText: LOCAL_ID });
+  const card = page.getByRole("region", { name: "Средний приоритет", exact: true }).locator("article").filter({ hasText: LOCAL_ID });
   const href = "/itsm/incidents/INC000000000003";
   await expect(card.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", href);
-  await expect(card.getByRole("button", { name: "Детали" })).toBeVisible();
-  await card.getByRole("button", { name: "Детали" }).click();
+  await expect(card.getByRole("button", { name: "Подробнее" })).toBeVisible();
+  await card.getByRole("button", { name: "Подробнее" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", href);
   const launch = dialog.getByRole("button", { name: "ИИ-анализ" });
@@ -60,7 +60,7 @@ test("D11 показывает пульт, навигацию проекта и 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
-  await expect(card.getByRole("button", { name: "Детали" })).toBeFocused();
+  await expect(card.getByRole("button", { name: "Подробнее" })).toBeFocused();
   await expect(page.getByRole("navigation", { name: "Разделы проекта" })).toBeVisible();
 
   for (const size of [

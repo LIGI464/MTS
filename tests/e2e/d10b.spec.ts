@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { startDashboard, type RunningApp } from "./support/harness.js";
 
-const GROUPS = ["Критические", "У координаторов", "Высокий приоритет", "Исследование"] as const;
+const GROUPS = ["Критические", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
 const HIGH_ID = "INC000000000001";
 const LONG_TITLE =
   "ДлинноеНазваниеИнцидентаБезПробеловКотороеДолжноПереноситьсяВнутриКарточкиИОставатьсяЧитаемымНаУзкомЭкране";
@@ -125,7 +125,7 @@ test("D10B ведёт Tab, Shift+Tab, Esc и возвращает фокус", a
   const details = group(page, "Высокий приоритет")
     .locator("article")
     .filter({ hasText: HIGH_ID })
-    .getByRole("button", { name: "Детали" });
+    .getByRole("button", { name: "Подробнее" });
   await details.focus();
   await expectFocusRing(page);
   await page.keyboard.press("Enter");
@@ -164,7 +164,7 @@ test("D10B выключает переходы при prefers-reduced-motion", a
   try {
     await openDashboard(page, app);
     const duration = await page.evaluate(() => {
-      const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "Детали");
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "Подробнее");
       const root = getComputedStyle(document.documentElement).getPropertyValue("--motion").trim();
       const transition = button ? getComputedStyle(button).transitionDuration : "";
       return { root, transition };

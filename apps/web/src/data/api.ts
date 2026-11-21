@@ -10,17 +10,17 @@ import {
 export class DashboardRequestError extends Error {
   readonly code: string;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, readonly status?: number) {
     super(message);
     this.name = "DashboardRequestError";
     this.code = code;
   }
 }
 
-export function errorFromBody(body: unknown, fallback: string): DashboardRequestError {
+export function errorFromBody(body: unknown, fallback: string, status?: number): DashboardRequestError {
   const parsed = ApiErrorSchema.safeParse(body);
-  if (parsed.success) return new DashboardRequestError(parsed.data.code, parsed.data.message);
-  return new DashboardRequestError("REQUEST_FAILED", fallback);
+  if (parsed.success) return new DashboardRequestError(parsed.data.code, parsed.data.message, status);
+  return new DashboardRequestError("REQUEST_FAILED", fallback, status);
 }
 
 export async function fetchDashboard(): Promise<Snapshot> {

@@ -19,6 +19,11 @@ describe("applyFrame", () => {
     expect(newer.snapshot?.revision).toBe(timeline.frames.assign.revision);
   });
 
+  it("does not replace a newer frame with a replay from an older revision", () => {
+    const latest = applyFrame(createClientFrameState(), timeline.frames.assign, "sse");
+    expect(applyFrame(latest, timeline.frames.critical, "sse")).toBe(latest);
+  });
+
   it("does not toast the same notice twice when the SSE frame repeats", () => {
     let state = applyFrame(createClientFrameState(), timeline.initial, "get");
     state = applyFrame(state, timeline.frames.critical, "sse");

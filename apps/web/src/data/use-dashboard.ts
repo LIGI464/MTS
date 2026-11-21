@@ -2,15 +2,16 @@ import {
   API_PREFIX,
   AnalysisResultSchema,
   SnapshotSchema,
-  makeMockTimeline,
   type AnalysisResult,
   type Notice,
   type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFrameState } from "./apply";
 import { fetchDashboard, requestAnalysis, requestReset } from "./api";
+import { createIncidentFixtures } from "./incident-fixtures";
+import { incidentApi, type IncidentClient } from "./incidents";
 
 export type DemoStep = "critical" | "assign" | "deadline" | "resolve";
 
@@ -19,6 +20,8 @@ type Connection = "connecting" | "live" | "reconnecting" | "mock";
 export function useDashboard(): {
   snapshot: Snapshot | null;
   nowMs: number;
+  sseRevision: number | null;
+  incidentClient: IncidentClient;
   connection: Connection;
   newNotices: Notice[];
   dismissNotice: (seq: number) => void;
@@ -30,14 +33,17 @@ export function useDashboard(): {
   const [boot] = useState(() => createBoot(mockMode));
   const [frame, setFrame] = useState<ClientFrameState>(boot.frame);
   const frameRef = useRef(frame);
-  frameRef.current = frame;
   const offsetRef = useRef(Date.now() - performance.now());
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [sseRevision, setSseRevision] = useState<number | null>(null);
   const [connection, setConnection] = useState<Connection>(mockMode ? "mock" : "connecting");
 
   const accept = useCallback((incoming: Snapshot, origin: "get" | "sse" | "reset") => {
     const current = frameRef.current;
     const next = applyFrame(current, incoming, origin);
+    if (origin === "sse" && (!current.snapshot || incoming.revision >= current.snapshot.revision)) {
+      setSseRevision((previous) => Math.max(previous ?? 0, incoming.revision));
+    }
     if (next === current) return;
     frameRef.current = next;
     setFrame(next);
@@ -48,6 +54,9 @@ export function useDashboard(): {
     }
     if (!mockMode) setConnection("live");
   }, [mockMode]);
+
+  const incidentClient = useMemo(() => boot.fixtures?.client((incoming) => accept(incoming, "sse")) ?? incidentApi,
+    [boot.fixtures, accept]);
 
   const query = useQuery({
     queryKey: ["dashboard"],
@@ -121,35 +130,21 @@ export function useDashboard(): {
 
   async function resetDemo(token: string): Promise<Snapshot> {
     if (token.trim().length === 0) throw new Error("Нужен операторский токен");
-    if (!mockMode || !boot.timeline) return requestReset(token);
-    const current = frameRef.current.snapshot;
-    const maxSeq = Math.max(0, ...(current?.notices.map((notice) => notice.seq) ?? [0]), ...frameRef.current.seen);
-    const next = SnapshotSchema.parse({
-      ...structuredClone(boot.timeline.initial),
-      revision: (current?.revision ?? boot.timeline.initial.revision) + 1,
-      serverNow: new Date().toISOString(),
-      notices: [
-        {
-          seq: maxSeq + 1,
-          kind: "demo.reset",
-          incidentId: null,
-          title: "Набор восстановлен",
-          at: new Date().toISOString(),
-        },
-      ],
-    });
+    if (!boot.fixtures) return requestReset(token);
+    const next = boot.fixtures.reset(Date.now());
     accept(next, "reset");
     return next;
   }
 
   function stepMock(step: DemoStep) {
-    if (!boot.timeline) return;
-    accept(boot.timeline.frames[step], "sse");
+    if (boot.fixtures) accept(boot.fixtures.step(step, Date.now()), "sse");
   }
 
   const value = {
     snapshot: frame.snapshot,
     nowMs,
+    sseRevision,
+    incidentClient,
     connection,
     newNotices: frame.visible,
     dismissNotice,
@@ -159,16 +154,8 @@ export function useDashboard(): {
   return mockMode ? { ...value, stepMock } : value;
 }
 
-function createBoot(mockMode: boolean): {
-  timeline: ReturnType<typeof makeMockTimeline> | null;
-  frame: ClientFrameState;
-} {
-  if (!mockMode) return { timeline: null, frame: createClientFrameState() };
-  const timeline = makeMockTimeline(Date.now());
-  SnapshotSchema.parse(timeline.initial);
-  for (const frame of Object.values(timeline.frames)) SnapshotSchema.parse(frame);
-  return {
-    timeline,
-    frame: applyFrame(createClientFrameState(), timeline.initial, "get"),
-  };
+function createBoot(mockMode: boolean) {
+  const fixtures = mockMode ? createIncidentFixtures(Date.now()) : null;
+  const frame = createClientFrameState();
+  return { fixtures, frame: fixtures ? applyFrame(frame, fixtures.initial, "get") : frame };
 }

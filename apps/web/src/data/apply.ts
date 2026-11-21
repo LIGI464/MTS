@@ -23,7 +23,10 @@ export function createClientFrameState(): ClientFrameState {
 }
 
 export function applyFrame(state: ClientFrameState, incoming: Snapshot, origin: FrameOrigin): ClientFrameState {
-  if (origin === "get" && state.sawSse && state.snapshot && incoming.revision <= state.snapshot.revision) {
+  if (state.snapshot && (
+    incoming.revision < state.snapshot.revision ||
+    (origin === "get" && state.sawSse && incoming.revision === state.snapshot.revision)
+  )) {
     return state;
   }
 

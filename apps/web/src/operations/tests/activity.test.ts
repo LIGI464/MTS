@@ -1,7 +1,7 @@
 import { makeMockTimeline, type Notice } from "@mts/contracts";
 import { describe, expect, test } from "vitest";
 import { activityEvents, createActivityState, updateActivity } from "../activity";
-import { filterQueueGroups, summarizeQueues } from "../queue-summary";
+
 
 const now = Date.UTC(2026, 10, 21, 11);
 const timeline = makeMockTimeline(now);
@@ -16,10 +16,12 @@ describe("появление инцидентов", () => {
 
     const replay = updateActivity(next, structuredClone(critical), critical.notices);
     expect(replay.alert).toBe(next.alert);
+    expect(replay.unread.size).toBe(1);
     expect(activityEvents(replay)).toHaveLength(1);
 
     const loaded = updateActivity(createActivityState(), critical, critical.notices);
     expect(loaded.alert).toBeNull();
+    expect(loaded.unread.size).toBe(0);
     expect(activityEvents(loaded)).toHaveLength(1);
   });
 
@@ -51,15 +53,4 @@ describe("появление инцидентов", () => {
     expect(state.alert).toBeNull();
     expect(activityEvents(state).map(({ kind }) => kind)).toEqual(["demo.reset"]);
   });
-});
-
-test("сводка SLA считает уникальные инциденты и сохраняет пересечения очередей", () => {
-  const assign = timeline.frames.assign;
-  const result = summarizeQueues(assign, now);
-  expect(result.critical.size).toBe(1);
-  expect(result.active.size).toBe(2);
-  const filtered = filterQueueGroups(assign, result.critical);
-  expect(filtered.groups.critical).toEqual(filtered.groups.coordinator);
-  expect(filtered.groups.high).toEqual([]);
-  expect(filtered.incidents).toBe(assign.incidents);
 });

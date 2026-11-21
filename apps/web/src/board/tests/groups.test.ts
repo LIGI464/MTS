@@ -1,37 +1,27 @@
-import { makeMockTimeline } from "@mts/contracts";
+import { COORDINATOR_TEAM, makeMockTimeline } from "@mts/contracts";
 import { describe, expect, it } from "vitest";
-import { cardsForGroup } from "../model";
+import { incidentCoordinator, priorityQueues } from "../model";
 
-const nowMs = Date.parse("2026-01-15T09:00:00.000Z");
-const criticalId = "INC000000000001";
+const timeline = makeMockTimeline(Date.parse("2026-01-15T09:00:00.000Z"));
 
-describe("board groups", () => {
-  const timeline = makeMockTimeline(nowMs);
-
-  it("shows the same incident in both groups on assign", () => {
-    const assign = timeline.frames.assign;
-    const critical = cardsForGroup(assign, "critical").find((card) => card.id === criticalId);
-    const coordinator = cardsForGroup(assign, "coordinator").find((card) => card.id === criticalId);
-    expect(critical?.incident).toBeTruthy();
-    expect(critical?.incident).toBe(coordinator?.incident);
-    expect(critical?.incident?.priority).toBe(4);
+describe("priority queues", () => {
+  it("uses priority and a single slot per ID, including inactive records", () => {
+    const [critical, high, research] = timeline.frames.assign.incidents;
+    const low = { ...high, id: "INC-LOW", priority: 1 as const };
+    const queued = priorityQueues([critical, high, research, low, critical]);
+    expect(queued[4]).toEqual([critical]);
+    expect(queued[3]).toEqual([high]);
+    expect(queued[2]).toEqual([research]);
+    expect(queued[1]).toEqual([low]);
+    expect(research.state).toBe("Research");
   });
 
-  it("drops the resolved incident from the active groups", () => {
-    const resolved = timeline.frames.resolve;
-    expect(cardsForGroup(resolved, "critical").some((card) => card.id === criticalId)).toBe(false);
-    expect(cardsForGroup(resolved, "coordinator").some((card) => card.id === criticalId)).toBe(false);
-    expect(cardsForGroup(resolved, "high").some((card) => card.id === criticalId)).toBe(false);
-    expect(resolved.incidents.find((item) => item.id === criticalId)?.state).toBe("Resolved");
-    expect(cardsForGroup(resolved, "research").map((card) => card.id)).toEqual(["INC000000000003"]);
-  });
-
-  it("keeps the group slot when the id is missing from the map", () => {
-    const snapshot = structuredClone(timeline.initial);
-    snapshot.groups.high.push("INC-MISSING");
-    const cards = cardsForGroup(snapshot, "high");
-    expect(cards.map((card) => card.id)).toContain("INC-MISSING");
-    expect(cards.find((card) => card.id === "INC-MISSING")?.incident).toBeNull();
-    expect(cards.filter((card) => card.incident).map((card) => card.id)).toEqual(["INC000000000001", "INC000000000002"]);
+  it("reads explicit coordinator assignments and supports old snapshots", () => {
+    const [incident] = timeline.initial.incidents;
+    expect(incidentCoordinator(incident)).toBeNull();
+    const legacy = { ...incident, team: COORDINATOR_TEAM };
+    expect(incidentCoordinator(legacy)?.name).toBe(incident.assignee);
+    expect(incidentCoordinator({ ...legacy, coordinator: null })).toBeNull();
+    expect(incidentCoordinator({ ...incident, coordinator: { id: "operator", name: "Оператор" } })?.id).toBe("operator");
   });
 });

@@ -1,28 +1,31 @@
-import type { Incident, Snapshot } from "@mts/contracts";
-import { ArrowUpRight, Clock, ScanSearch, ShieldAlert, Timer, Users } from "lucide-react";
+import type { Incident } from "@mts/contracts";
+import { ArrowUpRight, Clock, ShieldAlert, Timer, Minus, SignalLow } from "lucide-react";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
-import { cardsForGroup, displayText, GROUP_ORDER } from "./model";
+import { displayText, incidentCoordinator, PRIORITIES, priorityQueues } from "./model";
 import type { IncidentAlert } from "../operations/activity";
 import styles from "./board.module.css";
 
-const groupIcons = { critical: ShieldAlert, coordinator: Users, high: Timer, research: ScanSearch };
+const groupIcons = { 4: ShieldAlert, 3: Timer, 2: Minus, 1: SignalLow };
 
 export function IncidentBoard({
-  snapshot,
+  incidents,
   nowMs,
   highlight,
   onInspect,
+  onAssign,
 }: {
-  snapshot: Snapshot;
+  incidents: readonly Incident[];
   nowMs: number;
   highlight?: IncidentAlert | null;
   onInspect: (id: string) => void;
+  onAssign: (id: string) => void;
 }) {
+  const queues = priorityQueues(incidents);
   return (
     <div className={styles.board}>
-      {GROUP_ORDER.map(([key, title]) => {
-        const cards = cardsForGroup(snapshot, key);
+      {PRIORITIES.map(({ id: key, title, label }) => {
+        const cards = queues[key];
         const Icon = groupIcons[key];
         return (
           <section className={styles.group} key={key} aria-label={title} data-surface="surface" data-group={key}>
@@ -33,17 +36,11 @@ export function IncidentBoard({
             </header>
             {cards.length === 0 ? <p className={styles.empty}>Нет инцидентов</p> : null}
             <div className={styles.cards}>
-              {cards.map((card) =>
-                card.incident ? (
-                  <IncidentCard
-                    key={card.id}
-                    incident={card.incident}
-                    nowMs={nowMs}
-                    newSequence={highlight?.incidentIds.has(card.id) ? highlight.sequence : undefined}
-                    onInspect={onInspect}
-                  />
-                ) : null,
-              )}
+              {cards.map((incident) => (
+                <IncidentCard key={incident.id} incident={incident} priorityLabel={label} nowMs={nowMs}
+                  newSequence={highlight?.incidentIds.has(incident.id) ? highlight.sequence : undefined}
+                  onInspect={onInspect} onAssign={onAssign} />
+              ))}
             </div>
           </section>
         );
@@ -54,23 +51,31 @@ export function IncidentBoard({
 
 function IncidentCard({
   incident,
+  priorityLabel,
   nowMs,
   newSequence,
   onInspect,
+  onAssign,
 }: {
   incident: Incident;
+  priorityLabel: string;
   nowMs: number;
   newSequence?: number;
   onInspect: (id: string) => void;
+  onAssign: (id: string) => void;
 }) {
+  const coordinator = incidentCoordinator(incident);
   const sla = presentSla(incident, nowMs);
   const tone = sla.tone === "alert" ? styles.alert : sla.tone === "near" ? styles.near : styles.calm;
 
   return (
-    <article className={`${styles.card} ${tone}`} data-fresh={newSequence !== undefined ? "true" : undefined}>
+    <article data-incident-id={incident.id} className={`${styles.card} ${tone}`} data-fresh={newSequence !== undefined ? "true" : undefined}>
       <div className={styles.cardHeading}>
         <span className={styles.id} data-numeric="tabular">{incident.id}</span>
-        <span className={styles.status}>{incident.stateLabel}</span>
+        <div className={styles.badges}>
+          <span className={styles.priority}>{priorityLabel}</span>
+          <span className={styles.status}>{incident.stateLabel}</span>
+        </div>
       </div>
       <div className={styles.titleRow}>
         <button type="button" className={styles.title} title={incident.title} onClick={() => onInspect(incident.id)}>
@@ -87,6 +92,9 @@ function IncidentCard({
         <p data-numeric="tabular">Регистрация {formatMoscow(incident.createdAt)}</p>
         <p>{displayText(incident.assignee, incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
         <p>{displayText(incident.team, "Группа не назначена")}</p>
+        <p className={styles.coordinator}>
+          {coordinator ? `Координатор · ${coordinator.name}` : "Координатор не назначен"}
+        </p>
       </div>
       <div className={styles.cardFooter}>
         <p className={styles.time} data-numeric="tabular" title={sla.hint}>
@@ -95,11 +103,14 @@ function IncidentCard({
           {sla.duration ? <span>{sla.duration}</span> : null}
         </p>
         <div className={styles.actions}>
+          <button type="button" className={`${styles.action} ${styles.assignment}`} onClick={() => onAssign(incident.id)}>
+            {coordinator ? "Сменить координатора" : "Назначить координатора"}
+          </button>
           <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
             В ITSM <ArrowUpRight size={14} aria-hidden />
           </a>
           <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id)}>
-            Детали
+            Подробнее
           </button>
         </div>
       </div>

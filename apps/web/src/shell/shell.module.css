@@ -162,3 +162,42 @@
     display: grid;
   }
 }
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eventsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.eventsButton:hover { background: var(--canvas); }
+
+.eventsButton span {
+  display: grid;
+  min-width: 20px;
+  min-height: 20px;
+  padding-inline: 4px;
+  place-items: center;
+  border-radius: 20px;
+  background: var(--button);
+  color: var(--on-button);
+  font-size: 12px;
+}
+
+@media (max-width: 620px), (pointer: coarse) {
+  .eventsButton { min-height: 44px; }
+}

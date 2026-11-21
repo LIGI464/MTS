@@ -72,3 +72,9 @@ export function presentSla(incident: Incident, nowMs: number): SlaView {
   if (sla === "near") return { tone: "near", status: "Срок близко", duration, hint };
   return { tone: alert ? "alert" : "calm", status: "В сроке", duration, hint };
 }
+
+const moscowDay = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Moscow", dateStyle: "short" });
+
+export function registrationDay(iso: string): string {
+  return moscowDay.format(new Date(iso));
+}

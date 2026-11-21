@@ -1,100 +1,92 @@
 import type { Notice, Snapshot } from "@mts/contracts";
-import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowDown, ArrowUpRight, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnalysisPanel } from "./analysis";
-import { IncidentBoard, itsmHref } from "./board";
-import { formatMoscow, presentSla } from "./board/format";
+import { IncidentBoard } from "./board";
+import { IncidentDetails } from "./board/incident-details";
+import { uniqueIncidents } from "./board/model";
 import { useDashboard, type DemoStep } from "./data";
+import { coordinatorQuery } from "./data/incidents";
 import { DemoControls } from "./demo";
-import { ActivityFeed, DashboardMetrics, DashboardWorkspace, SoundButton } from "./operations/dashboard";
-import { filterQueueGroups, summarizeQueues, type QueueFilter } from "./operations/queue-summary";
+import { ActivityPanel } from "./operations/activity-panel";
+import { DashboardMetrics, SoundButton } from "./operations/dashboard";
+import { IncidentFilters } from "./operations/filters";
+import { DEFAULT_FILTERS, summarizeQueues, type QueueFilters } from "./operations/queue-summary";
+import { useFilteredIncidents } from "./operations/use-filtered-incidents";
 import { useIncidentAlerts } from "./operations/use-incident-alerts";
 import { useIncidentSound } from "./operations/use-incident-sound";
+import operationsStyles from "./operations/dashboard.module.css";
 import { AppShell } from "./shell";
-
-const HISTORY = new Set(["Resolved", "Closed", "Research", "Other"]);
+import { EventsButton } from "./shell/events-button";
 
 const STEPS: Array<[DemoStep, string]> = [
-  ["critical", "Критический"],
-  ["assign", "Назначение"],
-  ["deadline", "Срок"],
-  ["resolve", "Решение"],
+  ["critical", "Критический"], ["assign", "Назначение"], ["deadline", "Срок"], ["resolve", "Решение"],
 ];
 
 export function App() {
   const dashboard = useDashboard();
   const [operatorToken, setOperatorToken] = useState<string | undefined>(undefined);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"card" | "history">("card");
-  const [filter, setFilter] = useState<QueueFilter | null>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
+  const [selection, setSelection] = useState<{ id: string; mode: "detail" | "assignment" } | null>(null);
+  const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
+  const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
-  const selected = snapshot?.incidents.find((incident) => incident.id === selectedId) ?? null;
-  const selectedSla = selected ? presentSla(selected, dashboard.nowMs) : null;
-  const history = useMemo(() => snapshot?.incidents.filter((incident) => HISTORY.has(incident.state)) ?? [], [snapshot]);
-  const availableIds = useMemo(() => new Set(snapshot?.incidents.map(({ id }) => id)), [snapshot]);
-  const summary = snapshot ? summarizeQueues(snapshot, dashboard.nowMs) : null;
-  const filteredSnapshot = snapshot && summary && filter ? filterQueueGroups(snapshot, summary[filter]) : snapshot;
-  const { events, alert, highlight } = useIncidentAlerts(snapshot, dashboard.newNotices);
+  const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
+  const selected = incidents.find(({ id }) => id === selection?.id);
+  const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
+  const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient);
+  const summary = summarizeQueues(incidents, dashboard.nowMs);
+  const { events, alert, highlight, unreadCount, markRead } = useIncidentAlerts(snapshot, dashboard.newNotices);
   const sound = useIncidentSound(alert);
   const resetSeq = dashboard.newNotices.findLast((notice) => notice.kind === "demo.reset")?.seq;
 
   useEffect(() => {
     if (resetSeq === undefined) return;
-    setSelectedId(null);
-    setTab("card");
-    setFilter(null);
+    setSelection(null);
+    setFilters(DEFAULT_FILTERS);
   }, [resetSeq]);
 
-  function inspect(id: string) {
-    if (selectedId === null) {
-      openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    }
-    setSelectedId(id);
-    setTab("card");
+  function select(id: string, mode: "detail" | "assignment") {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelection({ id, mode });
   }
 
-  function closeDetails() {
-    const opener = openerRef.current;
-    openerRef.current = null;
-    setSelectedId(null);
-    queueMicrotask(() => opener?.focus());
+  function returnFocus() {
+    const target = opener.current;
+    opener.current = null;
+    if (target?.isConnected) target.focus({ preventScroll: true });
+    else document.getElementById("incident-search")?.focus({ preventScroll: true });
+  }
+
+  function changeFilters(patch: Partial<QueueFilters>) {
+    setFilters((previous) => ({ ...previous, ...patch }));
   }
 
   return (
     <AppShell
       title="Пульт координатора"
-      headerActions={<SoundButton {...sound} />}
+      headerActions={
+        <>
+          <ActivityPanel events={events} unreadCount={unreadCount} highlight={highlight} markRead={markRead}
+            onInspect={(id) => select(id, "detail")}>
+            <EventsButton count={unreadCount} />
+          </ActivityPanel>
+          <SoundButton {...sound} />
+        </>
+      }
       healthBadge={
-        <span
-          className="health-text"
-          role="status"
-          data-live={dashboard.connection === "live" && snapshot?.source.status === "ok"}
-        >
+        <span className="health-text" role="status" data-live={dashboard.connection === "live" && snapshot?.source.status === "ok"}>
           {badgeText(dashboard.connection, snapshot)}
         </span>
       }
-      titleActions={snapshot ? (
-        <a className="activity-jump" href="#incident-activity">
-          События <ArrowDown size={15} aria-hidden />
-        </a>
-      ) : null}
       footerSlot={
         <>
-          <DemoControls
-            enabled={snapshot?.capabilities.demoReset ?? false}
-            liveAnalysis={snapshot?.capabilities.liveAnalysis ?? false}
-            operatorToken={operatorToken}
-            onOperatorToken={setOperatorToken}
-            onReset={dashboard.resetDemo}
-          />
+          <DemoControls enabled={snapshot?.capabilities.demoReset ?? false}
+            liveAnalysis={snapshot?.capabilities.liveAnalysis ?? false} operatorToken={operatorToken}
+            onOperatorToken={setOperatorToken} onReset={dashboard.resetDemo} />
           {dashboard.stepMock ? (
             <div className="mock-steps">
               {STEPS.map(([step, label]) => (
-                <button key={step} type="button" onClick={() => dashboard.stepMock?.(step)}>
-                  {label}
-                </button>
+                <button key={step} type="button" onClick={() => dashboard.stepMock?.(step)}>{label}</button>
               ))}
             </div>
           ) : null}
@@ -102,15 +94,9 @@ export function App() {
       }
     >
       {snapshot?.source.status === "stale" ? (
-        <p className="banner" role="status">
-          Показан последний сохранённый снимок. Источник устарел.
-        </p>
+        <p className="banner" role="status">Показан последний сохранённый снимок. Источник устарел.</p>
       ) : null}
-      {snapshot?.source.status === "unavailable" ? (
-        <p className="banner" role="status">
-          Файл временно недоступен
-        </p>
-      ) : null}
+      {snapshot?.source.status === "unavailable" ? <p className="banner" role="status">Файл временно недоступен</p> : null}
       <div className="sr-only" aria-live="polite">
         {highlight ? `Новые инциденты: ${[...highlight.incidentIds].join(", ")}` : ""}
       </div>
@@ -126,97 +112,36 @@ export function App() {
           ))}
         </div>
       ) : null}
-      {!snapshot && dashboard.connection === "connecting" ? (
-        <div className="skeleton" aria-busy="true">
-          Загрузка очереди
-        </div>
-      ) : null}
+      {!snapshot && dashboard.connection === "connecting" ? <div className="skeleton" aria-busy="true">Загрузка очереди</div> : null}
       {!snapshot && dashboard.connection !== "connecting" ? <p className="empty-screen">Нет данных</p> : null}
-      {filteredSnapshot && summary ? (
+      {snapshot ? (
         <>
-          <DashboardMetrics summary={summary} filter={filter} onChange={setFilter} />
-          <DashboardWorkspace
-            filter={filter}
-            onClear={() => setFilter(null)}
-            events={<ActivityFeed events={events} incidentIds={availableIds} highlight={highlight} onInspect={inspect} />}
-          >
-            <IncidentBoard
-              snapshot={filteredSnapshot}
-              nowMs={dashboard.nowMs}
-              highlight={highlight}
-              onInspect={inspect}
-            />
-          </DashboardWorkspace>
+          <DashboardMetrics summary={summary} filters={filters} onChange={changeFilters} />
+          <IncidentFilters filters={filters} incidents={incidents} coordinators={directory.data ?? []} onChange={changeFilters} />
+          <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
+            <div className={operationsStyles.queueHeader}>
+              <h2 id="queue-heading">Очереди инцидентов</h2>
+              <p role="status" data-numeric="tabular">
+                {filtered.loading ? "Проверяем поля заявок…" : `Показано ${filtered.incidents.length} из ${incidents.length}`}
+              </p>
+            </div>
+            {filtered.failures > 0 ? (
+              <p className="banner" role="alert">
+                Не удалось проверить поля заявок ({filtered.failures}).{" "}
+                <button type="button" onClick={filtered.retry}>Повторить</button>
+              </p>
+            ) : null}
+            <IncidentBoard incidents={filtered.incidents} nowMs={dashboard.nowMs} highlight={highlight}
+              onInspect={(id) => select(id, "detail")} onAssign={(id) => select(id, "assignment")} />
+          </section>
         </>
       ) : null}
-      <Dialog.Root open={selected !== null} onOpenChange={(open) => { if (!open) closeDetails(); }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="overlay" />
-          <Dialog.Content className="detail" data-surface="surface">
-            {selected && selectedSla ? (
-              <>
-                <div className="detail-heading">
-                  <div>
-                    <Dialog.Description className="detail-id" data-numeric="tabular">{selected.id}</Dialog.Description>
-                    <Dialog.Title>{selected.title}</Dialog.Title>
-                  </div>
-                  <Dialog.Close className="detail-close" aria-label="Закрыть">
-                    <X size={21} aria-hidden />
-                  </Dialog.Close>
-                </div>
-                <p className="detail-sla" data-tone={selectedSla.tone} data-numeric="tabular" title={selectedSla.hint}>
-                  <span>SLA</span>
-                  <strong>{selectedSla.status}</strong>
-                  {selectedSla.duration ? <span>{selectedSla.duration}</span> : null}
-                </p>
-                <div className="tabs" role="tablist" aria-label="Панель инцидента">
-                  <button type="button" role="tab" aria-selected={tab === "card"} onClick={() => setTab("card")}>
-                    Карточка
-                  </button>
-                  <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
-                    История
-                  </button>
-                </div>
-                <div role="tabpanel" hidden={tab !== "card"}>
-                  <dl className="detail-fields">
-                    <div><dt>Регистрация</dt><dd>{formatMoscow(selected.createdAt)}</dd></div>
-                    <div><dt>Статус</dt><dd>{selected.stateLabel}</dd></div>
-                    <div><dt>Исполнитель</dt><dd>{selected.assignee ?? "Исполнитель не назначен"}</dd></div>
-                    <div><dt>Команда</dt><dd>{selected.team ?? "Группа не назначена"}</dd></div>
-                  </dl>
-                  <p className="detail-summary">{selected.summary ?? "Описание не указано"}</p>
-                  <a className="detail-itsm" href={itsmHref(selected)} target="_blank" rel="noopener noreferrer">
-                    В ITSM <ArrowUpRight size={16} aria-hidden />
-                  </a>
-                  <AnalysisPanel
-                    incident={selected}
-                    runAnalysis={dashboard.runAnalysis}
-                    operatorToken={operatorToken}
-                  />
-                </div>
-                <div role="tabpanel" hidden={tab !== "history"}>
-                  {history.length === 0 ? (
-                    <p>История пуста</p>
-                  ) : (
-                    <ul className="history">
-                      {history.map((incident) => (
-                        <li key={incident.id}>
-                          <button type="button" onClick={() => inspect(incident.id)}>
-                            {incident.id} · {incident.title}
-                          </button>
-                          <span>{incident.stateLabel}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </>
-            ) : (
-              <Dialog.Title>Инцидент</Dialog.Title>
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {selection ? (
+        <IncidentDetails key={selection.id} id={selection.id} mode={selection.mode} incident={selected}
+          nowMs={dashboard.nowMs} client={dashboard.incidentClient} operatorToken={operatorToken}
+          runAnalysis={dashboard.runAnalysis} sseRevision={dashboard.sseRevision}
+          onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
+      ) : null}
     </AppShell>
   );
 }
@@ -242,6 +167,7 @@ function noticeLine(notice: Notice): string {
   if (notice.kind === "coordinator.assigned") {
     return `Назначен координаторам${id}${notice.title ? `: ${notice.title}` : ""}`;
   }
+  if (notice.kind === "coordinator.changed") return `Координатор изменён${id}`;
   if (notice.kind === "demo.reset") return notice.title ?? "Набор восстановлен";
   return notice.title ?? "Событие";
 }
