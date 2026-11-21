@@ -87,9 +87,14 @@ export const RawIncidentsSchema = z.array(RawIncidentSchema).superRefine((items,
 
 export const StateSchema = z.enum(["Assigned", "WorkInProgress", "Resolved", "Closed", "Research", "Other"]);
 export const GroupKeySchema = z.enum(["critical", "coordinator", "high", "research"]);
+export const CoordinatorSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+});
 export const NoticeKindSchema = z.enum([
   "critical.new",
   "coordinator.assigned",
+  "coordinator.changed",
   "critical.resolved",
   "demo.reset",
 ]);
@@ -102,6 +107,7 @@ export const IncidentSchema = z.strictObject({
   service: z.string().nullable(),
   team: z.string().nullable(),
   assignee: z.string().nullable(),
+  coordinator: CoordinatorSchema.nullable().optional(),
   state: StateSchema,
   stateLabel: z.string().min(1),
   priority: prioritySchema,

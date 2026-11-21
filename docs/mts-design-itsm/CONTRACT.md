@@ -32,12 +32,22 @@
 | Метод и путь | Вход | Выход |
 |---|---|---|
 | `GET /itsm/incidents` | Без параметров. Для объёма кейса поиск на клиенте | `{items: TicketSummary[]}`, одна строка на номер, включая архивные. |
-| `GET /itsm/incidents/:id` | URL-кодированный номер | `{ticket: TicketSummary, description, solution, history: HistoryEntry[]}`. |
+| `GET /itsm/incidents/:id` | URL-кодированный номер | `{ticket: TicketSummary, description, solution, history: HistoryEntry[], rawFields}`. |
+| `GET /coordinators` | Без параметров | Массив `[{id, name}]`. Оба поля — непустые строки. |
+| `POST /itsm/incidents/:id/coordinator` | `{coordinatorId, expectedVersion, requestId}` и Bearer | `{id, version, revision}`. `expectedVersion` берётся из `ticket.version`, `requestId` — UUID. |
 | `POST /dev/scenarios` | Команда из таблицы ниже и Bearer | `{id, version, revision}` после успешной записи; `version` — текущая непрозрачная версия заявки. |
 | `POST /itsm/incidents/:id/resolve` | `{requestId, expectedVersion, solution}` и Bearer | Такой же результат мутации. Текст trim, 1–1000 символов; записан в поле `solution`, указаны `completionDate`, `stateEnum`, метка и код по релизу. |
 | `POST /demo/reset` | Существующий маршрут и Bearer, после подтверждения в UI | Существующий Snapshot. Архив остаётся доступным. |
 
-`TicketSummary` содержит `id, version, title, product, service, team, assignee, state, stateLabel, priority, createdAt, dueAt, resolvedAt, present`. Форматы полей совпадают с текущим `Incident`. Поле `present` имеет тип boolean, дополнительное `hasSolution?: boolean` сообщает о наличии исходного текста. `description` и `solution` имеют тип `string | null`. `HistoryEntry` содержит `version, at, present, stateLabel, team, dueAt, priority, description, solution`. Время `at` — время наблюдения сервером. Старое событие не получает задним числом новое решение. Сервер возвращает историю от новых изменений к старым.
+`TicketSummary` содержит `id, version, title, product, service, team, assignee, state, stateLabel, priority, createdAt, dueAt, resolvedAt, present`. Форматы полей совпадают с текущим `Incident`. Поле `present` имеет тип boolean, дополнительное `hasSolution?: boolean` сообщает о наличии исходного текста. `description` и `solution` имеют тип `string | null`. `HistoryEntry` содержит `version, at, present, stateLabel, team, dueAt, priority, description, solution`. Время `at` — время наблюдения сервером. Каждая версия сохраняет текст решения на тот момент. Сервер возвращает историю от новых изменений к старым.
+
+`rawFields` содержит все ключи последней сохранённой исходной строки, в том числе для заявки в архиве. Значения передаются как JSON с исходными типами, включая неизвестные ключи, строковые идентификаторы, `null`, `false`, `0`, пустой `deadline` и служебный `waitingExitDate`. Для рабочего состояния используется `stateEnum`; в `rawFields.stateId` сохраняется, например, исходное `7` для `Resolved` или `10` для `Closed`.
+
+В `Incident`, `TicketSummary` и `HistoryEntry` доступно `coordinator?: {id, name} | null`. Пропуск поля и `null` означают отсутствие персонального назначения и поддерживаются для старых снимков и фикстур. У записи из источника начальное назначение выводится при точном совпадении `assignedGroupName` с `COORDINATOR_TEAM` и непустом `assignedEmployee`. Явное назначение хранится в SQLite отдельно от исходной группы и исполнителя. Сценарий `assign` меняет группу по правилам D21.
+
+Справочник читается при старте из `MTS_DATA_DIR/coordinators.json` в формате массива для `GET /coordinators`; идентификаторы и имена уникальны. При отсутствии файла список строится из сотрудников группы `COORDINATOR_TEAM` в текущей принятой выгрузке. В исходной карточке сотрудник из этой группы отображается и при отсутствии его имени в настроенном справочнике. Новое назначение принимает только идентификатор из текущего справочника. Неизвестная заявка или идентификатор координатора дают 404 (`NOT_FOUND` или `COORDINATOR_NOT_FOUND`), архивная заявка или конфликт версии — 409 (`TICKET_ARCHIVED` или `VERSION_CONFLICT`).
+
+При изменении персонального назначения сервер добавляет версию в историю и отправляет SSE `event: dashboard` с полным `Snapshot`, принятой `revision` и уведомлением `coordinator.changed` с `incidentId`, `title`, `at` и `seq`. `coordinator.assigned` обозначает прежнее событие входа заявки в очередь группы координаторов.
 
 | `action` у `POST /dev/scenarios` | Дополнительные поля | Результат |
 |---|---|---|
@@ -47,6 +57,15 @@
 | `deadline` | Те же плюс `deadline` — конкретная UTC-дата | Меняется только срок выбранного ID. Страница предлагает «через 90 секунд» и даёт выбрать другое время. |
 
 Одинаковый `requestId` для идентичной повторной команды возвращает тот же результат и запись. Иное тело с уже занятым ключом возвращает 409. Это относится и к решению по карточке ITSM. Версия привязана к записи и её присутствию, поэтому правка другого инцидента не блокирует пользователя. Устаревшая форма предлагает перечитать карточку и сохраняет введённый оператором текст. Один ID может входить в две группы доски и занимает одну строку реестра.
+
+## Импорт JSON · D24
+
+| Метод и путь | Вход | Выход |
+|---|---|---|
+| `POST /incidents/import/preview` | `{fileName, jsonText}` и Bearer. Имя файла и его содержимое — строки. | `{valid, errors, total, byPriority, added, updated, archived}`. При `valid: true` добавляются `previewId` и `expectedRevision`. |
+| `POST /incidents/import/apply` | `{previewId, expectedRevision, requestId}` и Bearer. `requestId` — UUID. | `{revision}` после принятия файла. |
+
+`errors` — массив сообщений. Он пуст при валидном предпросмотре; невалидный содержит хотя бы одну ошибку. `total` — число записей, `byPriority` — объект с числовыми счётчиками по строковым ключам `"1"`, `"2"`, `"3"`, `"4"` для низкого, среднего, высокого и критического приоритетов. `added`, `updated`, `archived` — счётчики изменений относительно текущего принятого файла. Все счётчики и ревизии — неотрицательные целые. `previewId` — непрозрачная строка. Предпросмотр проверяет файл без записи, применение проверяет ревизию и возвращает 409, если база предпросмотра устарела. Принятие изменившегося файла подтверждается тем же SSE `dashboard` с новой ревизией. Маршруты импорта реализуются в D24.
 
 ## Переходы и совместимость
 
