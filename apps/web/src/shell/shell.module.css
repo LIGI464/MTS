@@ -1,0 +1,184 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.headerInner,
+.workspace,
+.footerInner {
+  width: min(100%, var(--content-width, 1440px));
+  margin-inline: auto;
+  padding-inline: clamp(16px, 3vw, 42px);
+}
+
+.headerInner {
+  display: flex;
+  min-height: 67px;
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  text-decoration: none;
+}
+
+.brandMark {
+  display: block;
+  width: auto;
+  height: 42px;
+}
+
+.navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.navigation a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--motion) ease, color var(--motion) ease;
+}
+
+.navigation a:hover {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.navigation a[aria-current="page"] {
+  background: var(--critical-soft);
+  color: var(--button);
+}
+
+.headerActions {
+  margin-left: auto;
+}
+
+.workspace {
+  flex: 1;
+  padding-block: clamp(22px, 3vw, 38px) 34px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 22px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.titleRow h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.3vw, 44px);
+  font-weight: 500;
+  letter-spacing: -.038em;
+  line-height: 1.12;
+}
+
+.titleActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.footerInner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px 24px;
+  padding-block: 17px;
+}
+
+@media (max-width: 620px) {
+  .headerInner {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding-block: 10px;
+  }
+
+  .navigation {
+    order: 1;
+    width: 100%;
+  }
+
+  .navigation a {
+    min-height: 44px;
+    padding-inline: 8px;
+    font-size: 13px;
+  }
+
+  .navigation a svg {
+    display: none;
+  }
+
+  .titleRow {
+    margin-bottom: 16px;
+  }
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eventsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.eventsButton:hover { background: var(--canvas); }
+
+.eventsButton span {
+  display: grid;
+  min-width: 20px;
+  min-height: 20px;
+  padding-inline: 4px;
+  place-items: center;
+  border-radius: 20px;
+  background: var(--button);
+  color: var(--on-button);
+  font-size: 12px;
+}
+
+@media (max-width: 620px), (pointer: coarse) {
+  .eventsButton { min-height: 44px; }
+}

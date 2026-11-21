@@ -1,0 +1,53 @@
+.panel {
+  width: min(100% - 32px, 550px);
+}
+
+.texts,
+.section {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  overflow-wrap: anywhere;
+}
+
+.texts h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.failure p,
+.texts p { margin: 8px 0; }
+.texts p { white-space: pre-wrap; }
+
+.button {
+  min-height: 38px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.button, .section summary { cursor: pointer; }
+.section summary { font-weight: 500; }
+
+.raw {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.history {
+  margin: 10px 0 0;
+  padding-inline-start: 20px;
+}
+
+.history li { padding-block: 4px; }
+
+@media (max-width: 700px) {
+  .panel { width: 100%; }
+}

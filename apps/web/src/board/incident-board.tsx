@@ -1,99 +1,160 @@
-import { getSlaState, type Incident, type Snapshot } from "@mts/contracts";
+import type { ReactNode } from "react";
+import type { Incident } from "@mts/contracts";
+import { Icon, type IconName } from "../icons";
+import { CoordinatorValue } from "./coordinator";
+import { formatMoscow, presentSla } from "./format";
+import { itsmHref } from "./itsm";
+import { displayText, incidentCoordinator, PRIORITIES } from "./model";
+import type { IncidentAttention } from "../operations/activity";
+import { PRIMARY_QUEUES, PRIORITY_QUEUES, QUEUE_LABELS, SLA_QUEUES, queueId,
+  type QueueCategory, type QueueMembers } from "../operations/queue-summary";
+import styles from "./board.module.css";
 
-const GROUPS = [
-  ["critical", "Критические"],
-  ["coordinator", "У координаторов"],
-  ["high", "Высокий приоритет"],
-  ["research", "Исследование"],
-] as const;
-
-export function IncidentBoard({
-  snapshot,
-  nowMs,
-  onInspect,
-}: {
-  snapshot: Snapshot;
+export function IncidentBoard({ queues, nowMs, attention, pulse, onPulseEnd, onInspect }: {
+  queues: QueueMembers;
   nowMs: number;
-  onInspect: (id: string) => void;
+  attention: ReadonlyMap<QueueCategory, ReadonlyMap<string, IncidentAttention>>;
+  pulse: { category: QueueCategory; id: string } | null;
+  onPulseEnd: () => void;
+  onInspect: (id: string, key?: string) => void;
 }) {
-  const incidents = new Map(snapshot.incidents.map((incident) => [incident.id, incident]));
+  function renderCards(category: QueueCategory) {
+    const incidents = queues[category];
+    return incidents.length > 0 ? (
+      <div className={styles.cards}>
+        {incidents.map((incident) => (
+          <IncidentCard key={incident.id} incident={incident} nowMs={nowMs}
+            newSequence={attention.get(category)?.get(incident.id)?.key}
+            pulse={pulse?.category === category && pulse.id === incident.id}
+            onPulseEnd={onPulseEnd} onInspect={onInspect} />
+        ))}
+      </div>
+    ) : (
+      <p className={styles.empty}><span><Icon name="check-circle" /></span>Нет инцидентов</p>
+    );
+  }
+
+  function renderQueue(category: QueueCategory) {
+    const { label, icon } = QUEUE_LABELS[category];
+    const id = queueId(category);
+    return (
+      <QueueGroup key={category} id={id} label={label} icon={icon} count={queues[category].length}>
+        {renderCards(category)}
+      </QueueGroup>
+    );
+  }
 
   return (
-    <div className="board">
-      {GROUPS.map(([key, title]) => {
-        const ids = snapshot.groups[key];
-        return (
-          <section className="group" key={key} aria-label={title}>
-            <h2>
-              {title} · {ids.length}
-            </h2>
-            {ids.length === 0 ? <p className="empty">Нет инцидентов</p> : null}
-            <div className="cards">
-              {ids.map((id) => {
-                const incident = incidents.get(id);
-                if (!incident) return null;
-                return (
-                  <article className={cardClass(incident, nowMs)} key={id}>
-                    <h3>
-                      <button type="button" onClick={() => onInspect(incident.id)}>
-                        {incident.title}
-                      </button>
-                    </h3>
-                    <p>{incident.id}</p>
-                    <p>
-                      {incident.product ?? "Продукт не указан"}
-                      {incident.service ? ` · ${incident.service}` : ""}
-                    </p>
-                    <p className="time" title={moscow(incident.createdAt)}>
-                      {moscow(incident.createdAt)}
-                    </p>
-                    <p>{incident.assignee ?? (incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
-                    <p>{incident.team ?? "Группа не назначена"}</p>
-                    <p>{incident.stateLabel}</p>
-                    <p className="time" title={incident.dueAt ? moscow(incident.dueAt) : undefined}>
-                      {slaText(incident, nowMs)}
-                    </p>
-                    {incident.itsmUrl ? (
-                      <a href={incident.itsmUrl} target="_blank" rel="noopener noreferrer">
-                        В ITSM
-                      </a>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+    <div className={styles.board}>
+      {PRIMARY_QUEUES.map(renderQueue)}
+      <QueueGroup id="queue-deadlines" label="Сроки" icon="stopwatch" count={queues.near.length + queues.overdue.length}>
+        <div className={styles.deadlines}>
+          {SLA_QUEUES.map((category) => {
+            const id = queueId(category);
+            const { label } = QUEUE_LABELS[category];
+            return (
+              <section key={category} id={id} className={styles.deadline} aria-labelledby={`${id}-heading`} tabIndex={-1}>
+                <header className={styles.groupHead}>
+                  <h4 id={`${id}-heading`}>{label}</h4>
+                  <span className={styles.count} data-numeric="tabular">{queues[category].length}</span>
+                </header>
+                {renderCards(category)}
+              </section>
+            );
+          })}
+        </div>
+      </QueueGroup>
+      {PRIORITY_QUEUES.map(renderQueue)}
     </div>
   );
 }
 
-function cardClass(incident: Incident, nowMs: number): string {
-  const sla = getSlaState(incident, nowMs);
-  if (incident.priority === 4 || sla === "overdue") return "card critical";
-  if (sla === "near") return "card near";
-  return "card";
+function QueueGroup({ id, label, icon, count, children }: {
+  id: string;
+  label: string;
+  icon: IconName;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className={styles.group} id={id} aria-labelledby={`${id}-heading`} data-surface="surface" tabIndex={-1}>
+      <header className={styles.groupHead}>
+        <span className={styles.groupIcon}><Icon name={icon} /></span>
+        <h3 id={`${id}-heading`}>{label}</h3>
+        <span className={styles.count} data-numeric="tabular">{count}</span>
+      </header>
+      {children}
+    </section>
+  );
 }
 
-function slaText(incident: Incident, nowMs: number): string {
-  const sla = getSlaState(incident, nowMs);
-  if (sla === "done" && incident.state === "Research") return "Решён · исследование";
-  if (sla === "done" && incident.state === "Closed") return "Закрыт";
-  if (sla === "done") return "Решён";
-  if (sla === "near") return "Срок близко";
-  if (sla === "overdue") return "Просрочен";
-  if (sla === "unknown") return "Срок не задан";
-  return incident.dueAt ? moscow(incident.dueAt) : "Срок не задан";
-}
+function IncidentCard({
+  incident,
+  nowMs,
+  newSequence,
+  pulse,
+  onPulseEnd,
+  onInspect,
+}: {
+  incident: Incident;
+  nowMs: number;
+  newSequence?: string;
+  pulse: boolean;
+  onPulseEnd: () => void;
+  onInspect: (id: string, key?: string) => void;
+}) {
+  const priorityLabel = PRIORITIES.find(({ id }) => id === incident.priority)?.label;
+  const coordinator = incidentCoordinator(incident);
+  const sla = presentSla(incident, nowMs);
+  const tone = sla.tone === "alert" ? styles.alert : sla.tone === "near" ? styles.near : styles.calm;
 
-function moscow(iso: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
+  return (
+    <article data-incident-id={incident.id} className={`${styles.card} ${tone}`}
+      data-fresh={newSequence !== undefined || undefined} data-pulse={pulse || undefined}
+      onAnimationEnd={(event) => { if (pulse && event.target === event.currentTarget && !event.pseudoElement) onPulseEnd(); }}>
+      <div className={styles.cardHeading}>
+        <span className={styles.id} data-numeric="tabular">{incident.id}</span>
+        <div className={styles.badges}>
+          <span className={styles.priority} data-priority={incident.priority}>{priorityLabel}</span>
+          <span className={styles.status}>{incident.stateLabel}</span>
+          {newSequence !== undefined ? (
+            <span key={newSequence} className={styles.newMarker}><span className={styles.newLabel}>Новый</span></span>
+          ) : null}
+        </div>
+      </div>
+      <div className={styles.titleRow}>
+        <button type="button" className={styles.title} title={incident.title} data-card-title onClick={() => onInspect(incident.id, newSequence)}>
+          {incident.title}
+        </button>
+      </div>
+      <p className={styles.product}>
+        {displayText(incident.product, "Продукт не указан")}
+        {" · "}
+        {displayText(incident.service, "Сервис не указан")}
+      </p>
+      <div className={styles.meta}>
+        <p data-numeric="tabular">Регистрация {formatMoscow(incident.createdAt)}</p>
+        <p>{displayText(incident.assignee, incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
+        <p>{displayText(incident.team, "Группа не назначена")}</p>
+        <p className={styles.coordinator}>
+          {coordinator ? <>Координатор{" · "}</> : null}<CoordinatorValue coordinator={coordinator} />
+        </p>
+      </div>
+      <div className={styles.cardFooter}>
+        <p className={styles.time} data-numeric="tabular" title={sla.hint}>
+          <Icon name="clock" size={14} />
+          <span>{sla.status}</span>
+          {sla.duration ? <span>{sla.duration}</span> : null}
+        </p>
+        <div className={styles.actions}>
+          <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
+            В ITSM <Icon name="box-arrow-up-right" size={14} />
+          </a>
+          <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id, newSequence)}>
+            Подробнее
+          </button>
+        </div>
+      </div>
+    </article>
+  );
 }

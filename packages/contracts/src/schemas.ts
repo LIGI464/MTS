@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeUtcInstant } from "./dates.js";
+import { readExportPriority } from "./export-priority.js";
 
 const prioritySchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
 
@@ -45,9 +46,9 @@ const optionalSignal = z
   }, prioritySchema.nullable())
   .optional();
 
-const utcIso = z.string().refine((value) => normalizeUtcInstant(value) === value, "Ожидается UTC ISO");
+export const utcIso = z.string().refine((value) => normalizeUtcInstant(value) === value, "Ожидается UTC ISO");
 
-export const RawIncidentSchema = z.looseObject({
+const rawIncidentShape = z.looseObject({
   id: z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().min(1)),
   sysId: z.string().nullable().optional(),
   header: displayText,
@@ -70,6 +71,13 @@ export const RawIncidentSchema = z.looseObject({
   productUrl: z.union([z.string(), z.null()]).optional(),
 });
 
+export const RawIncidentSchema = z.preprocess((value) => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const row = value as Record<string, unknown>;
+  const priorityId = readExportPriority(row);
+  return priorityId === undefined || priorityId === row.priorityId ? value : { ...row, priorityId };
+}, rawIncidentShape);
+
 export const RawIncidentsSchema = z.array(RawIncidentSchema).superRefine((items, ctx) => {
   const seen = new Set<string>();
   items.forEach((item, index) => {
@@ -87,9 +95,14 @@ export const RawIncidentsSchema = z.array(RawIncidentSchema).superRefine((items,
 
 export const StateSchema = z.enum(["Assigned", "WorkInProgress", "Resolved", "Closed", "Research", "Other"]);
 export const GroupKeySchema = z.enum(["critical", "coordinator", "high", "research"]);
+export const CoordinatorSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+});
 export const NoticeKindSchema = z.enum([
   "critical.new",
   "coordinator.assigned",
+  "coordinator.changed",
   "critical.resolved",
   "demo.reset",
 ]);
@@ -102,6 +115,7 @@ export const IncidentSchema = z.strictObject({
   service: z.string().nullable(),
   team: z.string().nullable(),
   assignee: z.string().nullable(),
+  coordinator: CoordinatorSchema.nullable().optional(),
   state: StateSchema,
   stateLabel: z.string().min(1),
   priority: prioritySchema,
@@ -116,6 +130,7 @@ export const IncidentSchema = z.strictObject({
 
 export const NoticeSchema = z.strictObject({
   seq: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative().optional(),
   kind: NoticeKindSchema,
   incidentId: z.string().nullable(),
   title: z.string().nullable(),
