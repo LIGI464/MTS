@@ -1,5 +1,6 @@
 import type { Incident, Snapshot } from "@mts/contracts";
 import { AlertTriangle, Clock } from "lucide-react";
+import { personalCoordinatorLine } from "../ticket";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
 import { cardsForGroup, displayText, GROUP_ORDER } from "./model";
@@ -55,6 +56,7 @@ function IncidentCard({
 }) {
   const sla = presentSla(incident, nowMs);
   const tone = sla.tone === "alert" ? styles.alert : sla.tone === "near" ? styles.near : styles.calm;
+  const coordinator = personalCoordinatorLine(incident.coordinator);
 
   return (
     <article className={`${styles.card} ${tone}`}>
@@ -72,6 +74,7 @@ function IncidentCard({
       </p>
       <p>{displayText(incident.assignee, incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
       <p>{displayText(incident.team, "Группа не назначена")}</p>
+      {coordinator ? <p>{coordinator}</p> : null}
       <p>{incident.stateLabel}</p>
       <p className={styles.time} data-numeric="tabular" title={sla.hint}>
         <Clock size={15} aria-hidden />

@@ -6,6 +6,7 @@ import { IncidentBoard, itsmHref } from "./board";
 import { useDashboard, type DemoStep } from "./data";
 import { DemoControls } from "./demo";
 import { AppShell } from "./shell";
+import { personalCoordinatorLine, TicketRecord } from "./ticket";
 
 const HISTORY = new Set(["Resolved", "Closed", "Research", "Other"]);
 
@@ -144,7 +145,14 @@ export function App() {
                     {selected.assignee ?? (selected.team ? "Исполнитель не назначен" : "Назначение не указано")}
                   </p>
                   <p>Команда: {selected.team ?? "Группа не назначена"}</p>
+                  <p>{personalCoordinatorLine(selected.coordinator) ?? "Персональный координатор не назначен"}</p>
                   <p>{selected.summary ?? "Описание не указано"}</p>
+                  <TicketRecord
+                    id={selected.id}
+                    revision={snapshot?.revision ?? null}
+                    operatorToken={operatorToken}
+                    onOperatorToken={setOperatorToken}
+                  />
                   <a className="detail-itsm" href={itsmHref(selected)} target="_blank" rel="noopener noreferrer">
                     В ITSM
                   </a>
@@ -201,6 +209,9 @@ function noticeLine(notice: Notice): string {
   }
   if (notice.kind === "coordinator.assigned") {
     return `Назначен координаторам${id}${notice.title ? `: ${notice.title}` : ""}`;
+  }
+  if (notice.kind === "coordinator.changed") {
+    return `Персональный координатор изменён${id}${notice.title ? `: ${notice.title}` : ""}`;
   }
   if (notice.kind === "demo.reset") return notice.title ?? "Набор восстановлен";
   return notice.title ?? "Событие";

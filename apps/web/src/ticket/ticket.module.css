@@ -1,0 +1,107 @@
+.record {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+
+.section h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.hint,
+.problem p,
+.section p {
+  margin: 0;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: var(--meta-size);
+}
+
+.fields {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.fields div {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.fields dt {
+  overflow-wrap: anywhere;
+  font-size: var(--meta-size);
+  font-weight: 500;
+}
+
+.fields dd {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.type {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.form {
+  display: grid;
+  gap: 8px;
+}
+
+.form label {
+  font-size: var(--meta-size);
+}
+
+.form select,
+.form input,
+.form button,
+.problem button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.form button,
+.problem button {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.form button {
+  background: var(--button);
+  border-color: var(--button);
+  color: var(--on-button);
+  font-weight: 500;
+}
+
+.form button:disabled,
+.form select:disabled,
+.form input:disabled,
+.problem button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.problem {
+  display: grid;
+  gap: 8px;
+}
