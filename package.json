@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "prep:local": "npm run build -w @mts/contracts && npm run build -w @mts/analysis",
-    "dev:web": "node scripts/dev-web.mjs",
+    "dev:web": "npm run prep:local && node scripts/dev-web.mjs",
     "dev:api": "npm run dev -w @mts/api",
     "dev": "node scripts/dev.mjs",
     "check": "npm run prep:local && npm run check -w @mts/contracts && npm run check -w @mts/analysis && npm run check -w @mts/api && npm run check -w @mts/web",
