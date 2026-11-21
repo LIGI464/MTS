@@ -1,3 +1,4 @@
+import type { Coordinator, RawIncidentFields } from "@mts/contracts";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { access, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -38,9 +39,19 @@ export type RunningApp = {
 
 type LogBuffer = { text: string };
 
-export async function startDashboard(mode: AnalysisMode = "rules", itsmTemplate = ""): Promise<RunningApp> {
+export async function startDashboard(
+  mode: AnalysisMode = "rules",
+  itsmTemplate = "",
+  seed?: { incidents?: RawIncidentFields[]; coordinators?: Coordinator[] },
+): Promise<RunningApp> {
   await access(START_JS);
   const dataDir = await mkdtemp(join(tmpdir(), "mts-e2e-"));
+  if (seed?.incidents) {
+    const bytes = JSON.stringify(seed.incidents);
+    await writeFile(join(dataDir, "baseline.json"), bytes);
+    await writeFile(join(dataDir, LIVE_FILENAME), bytes);
+  }
+  if (seed?.coordinators) await writeFile(join(dataDir, "coordinators.json"), JSON.stringify(seed.coordinators));
   const port = await freePort();
   const mock = mode === "rules" ? undefined : await startResponsesMock(mode === "live-ok");
   const log: LogBuffer = { text: "" };

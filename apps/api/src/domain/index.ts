@@ -43,14 +43,20 @@ export function diffNotices(
   const previousCoordinator = new Set(previous.groups.coordinator);
   const nextCritical = new Set(next.groups.critical);
   const nextCoordinator = new Set(next.groups.coordinator);
+  const previousIncidents = new Map(previous.incidents.map((incident) => [incident.id, incident]));
 
   const notices: Omit<Notice, "seq">[] = [];
-  for (const { id, state, title } of next.incidents) {
+  for (const { id, state, title, coordinator } of next.incidents) {
     if (nextCritical.has(id) && !previousCritical.has(id)) {
       notices.push({ kind: "critical.new", incidentId: id, title, at });
     }
     if (nextCoordinator.has(id) && !previousCoordinator.has(id)) {
       notices.push({ kind: "coordinator.assigned", incidentId: id, title, at });
+    }
+    const prior = previousIncidents.get(id);
+    if (prior && (prior.coordinator?.id !== coordinator?.id || prior.coordinator?.name !== coordinator?.name)) {
+      const message = coordinator ? `Координатор заявки ${id}: ${coordinator.name}` : `Снято назначение координатора заявки ${id}`;
+      notices.push({ kind: "coordinator.changed", incidentId: id, title: message, at });
     }
     if (previousCritical.has(id) && (state === "Resolved" || state === "Closed" || state === "Research")) {
       notices.push({ kind: "critical.resolved", incidentId: id, title: "Критический инцидент решён", at });

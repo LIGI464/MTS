@@ -21,7 +21,7 @@ export function AppShell({
   footerSlot?: ReactNode;
   headerActions?: ReactNode;
   titleActions?: ReactNode;
-  title?: string;
+  title?: string | null;
 }) {
   const pathname = window.location.pathname.replace(/\/$/, "") || "/admin/incidents";
 
@@ -49,13 +49,12 @@ export function AppShell({
         </div>
       </header>
       <main className={styles.workspace}>
-        <div className={styles.titleRow}>
-          <h1>{title}</h1>
-          <div className={styles.titleActions}>
-            {healthBadge}
-            {titleActions}
+        {title !== null || healthBadge || titleActions ? (
+          <div className={styles.titleRow}>
+            {title !== null ? <h1>{title}</h1> : null}
+            {healthBadge || titleActions ? <div className={styles.titleActions}>{healthBadge}{titleActions}</div> : null}
           </div>
-        </div>
+        ) : null}
         {children}
       </main>
       <footer className={styles.footer}>

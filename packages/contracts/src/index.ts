@@ -55,3 +55,5 @@ export type {
   State,
 } from "./schemas.js";
 export { getSlaState, isActiveState } from "./sla.js";
+export { ResolveIncidentSchema, ScenarioCommandSchema } from "./itsm.js";
+export type { HistoryEntry, MutationResult, ResolveIncident, ScenarioCommand, TicketDetail, TicketList, TicketSummary } from "./itsm.js";

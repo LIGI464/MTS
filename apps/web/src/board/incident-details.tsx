@@ -37,19 +37,20 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, mode, nowMs, client, sseRevision, operatorToken, runAnalysis, onClose, onReturnFocus }: {
+export function IncidentDetails({ id, incident, mode, nowMs, client, revision, sseRevision, operatorToken, runAnalysis, onClose, onReturnFocus }: {
   id: string;
   incident: Incident | undefined;
   mode: "detail" | "assignment";
   nowMs: number;
   client: IncidentClient;
+  revision?: number;
   sseRevision: number | null;
   operatorToken?: string;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
   onClose: () => void;
   onReturnFocus: () => void;
 }) {
-  const detail = useQuery({ ...detailQuery(client, id, incident?.version), refetchOnMount: "always" });
+  const detail = useQuery({ ...detailQuery(client, id, incident?.version, revision), refetchOnMount: "always" });
   const directory = useQuery(coordinatorQuery(client));
   const record = detail.data;
   const known = record?.ticket ?? incident;

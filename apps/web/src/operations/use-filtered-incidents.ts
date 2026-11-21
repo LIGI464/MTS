@@ -8,11 +8,12 @@ export function useFilteredIncidents(
   filters: QueueFilters,
   nowMs: number,
   client: IncidentClient,
+  revision?: number,
 ) {
   const candidates = filterIncidents(incidents, filters, nowMs);
   const needsDetails = needsRawFields(filters);
   const results = useQueries({
-    queries: needsDetails ? candidates.map(({ id, version }) => detailQuery(client, id, version)) : [],
+    queries: needsDetails ? candidates.map(({ id, version }) => detailQuery(client, id, version, revision)) : [],
   });
   return {
     incidents: needsDetails ? candidates.filter((_, index) => {

@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { isActiveState } from "@mts/contracts";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { itsmHref } from "../board/itsm";
 import {
   DeveloperRequestError,
@@ -50,12 +50,15 @@ export function DeveloperPage({
   const [session, setSession] = useState<Session>(createSession);
   const [token, setToken] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  const writing = useRef(false);
   const writable = stand.mode === "live";
   const busy = session.phase === "pending";
   const selected = stand.incidents.find((incident) => incident.id === session.selectedId) ?? null;
+  const versionPending = Boolean(selected && !selected.version && !session.versionOverride[selected.id]);
   const options = stand.incidents.filter((incident) => isActiveState(incident.state) || incident.id === session.selectedId);
 
   async function run(action: DeveloperAction) {
+    if (writing.current) return;
     const now = new Date();
     const prepared = prepareSubmit(session, {
       action,
@@ -70,6 +73,7 @@ export function DeveloperPage({
       setSession(applyFailure(prepared.state, "token", new Date().toISOString()));
       return;
     }
+    writing.current = true;
     try {
       const receipt = await transport.send(prepared.intent, token.trim());
       setSession((current) => applySuccess(current.phase === "pending" ? current : prepared.state, receipt, new Date().toISOString()));
@@ -79,10 +83,13 @@ export function DeveloperPage({
       setSession((current) =>
         applyFailure(current.phase === "pending" ? current : prepared.state, kind, new Date().toISOString(), fresh?.version ?? null),
       );
+    } finally {
+      writing.current = false;
     }
   }
 
   async function confirmAndReset() {
+    if (writing.current) return;
     const started = beginReset(session);
     if (started === session) return;
     setSession(started);
@@ -91,12 +98,15 @@ export function DeveloperPage({
       setSession(finishReset(started, new Date().toISOString(), false, "token"));
       return;
     }
+    writing.current = true;
     try {
       await transport.reset(token.trim());
       setSession((current) => finishReset(current.phase === "pending" ? current : started, new Date().toISOString(), true));
     } catch (caught) {
       const kind = caught instanceof DeveloperRequestError ? caught.kind : "network";
       setSession((current) => finishReset(current.phase === "pending" ? current : started, new Date().toISOString(), false, kind));
+    } finally {
+      writing.current = false;
     }
   }
 
@@ -118,7 +128,7 @@ export function DeveloperPage({
               key={action}
               type="button"
               aria-pressed={session.lastAction === action}
-              disabled={!writable || busy}
+              disabled={!writable || busy || (action !== "create-critical" && versionPending)}
               onClick={() => void run(action)}
             >
               {ACTION_LABELS[action]}

@@ -1,11 +1,15 @@
+import { maxHeaderSize } from "node:http";
 import { basename, extname } from "node:path";
 import fastifyStatic from "@fastify/static";
 import { API_PREFIX, type ApiError } from "@mts/contracts";
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import { registerAnalysisRoutes } from "../analysis/index.js";
 import { registerDemoRoutes } from "../demo/index.js";
+import { registerItsmRoutes } from "../itsm/index.js";
+import { MutationError } from "../itsm/mutation.js";
 import type { RouteContext } from "../runtime-contract.js";
 import { registerEvents } from "./events.js";
+import { registerImportRoutes } from "./import.js";
 
 const NOT_FOUND = { code: "NOT_FOUND", message: "Маршрут не найден." } satisfies ApiError;
 
@@ -15,6 +19,7 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
     logger: { level: "warn" },
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 8 * 1024,
+    routerOptions: { maxParamLength: maxHeaderSize },
   });
   app.addHook("onClose", async () => runtime.close());
 
@@ -25,12 +30,20 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
   registerEvents(app, runtime);
   registerDemoRoutes(app, context);
   registerAnalysisRoutes(app, context);
+  registerItsmRoutes(app, context);
+  registerImportRoutes(app, context);
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof MutationError) {
+      return reply.code(error.status).send({ code: error.code, message: error.message } satisfies ApiError);
+    }
     const status = error instanceof Error && "statusCode" in error && typeof error.statusCode === "number"
       ? error.statusCode : 500;
     if (status === 413) {
-      const response: ApiError = { code: "BODY_TOO_LARGE", message: "Размер запроса превышает 8 КиБ." };
+      const response: ApiError = {
+        code: "BODY_TOO_LARGE",
+        message: `Размер запроса превышает ${request.routeOptions.bodyLimit / 1024} КиБ.`,
+      };
       return reply.code(413).send(response);
     }
     if (status >= 400 && status < 500) {
@@ -52,10 +65,9 @@ export function buildApp(context: RouteContext, webRoot?: string): FastifyInstan
         reply.header("Cache-Control", immutable ? "public, max-age=31536000, immutable" : "no-store");
       },
     });
-    app.get("/", async (_request, reply) => reply.header("Cache-Control", "no-store").sendFile("index.html"));
-    app.get("/admin/incidents", async (_request, reply) =>
-      reply.header("Cache-Control", "no-store").sendFile("index.html"),
-    );
+    for (const route of ["/", "/admin/incidents", "/admin/developers", "/itsm/incidents", "/itsm/incidents/:id"]) {
+      app.get(route, async (_request, reply) => reply.header("Cache-Control", "no-store").sendFile("index.html"));
+    }
   }
 
   app.setNotFoundHandler((request, reply) => {

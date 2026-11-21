@@ -40,7 +40,7 @@ export function App() {
     queryFn: ({ signal }) => fetchImportAvailability(signal),
     staleTime: 60_000,
   });
-  const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient);
+  const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient, snapshot?.revision);
   const summary = summarizeQueues(incidents, dashboard.nowMs);
   const { events, alert, highlight, unreadCount, markRead } = useIncidentAlerts(snapshot, dashboard.newNotices);
   const sound = useIncidentSound(alert);
@@ -146,7 +146,7 @@ export function App() {
       ) : null}
       {selection ? (
         <IncidentDetails key={selection.id} id={selection.id} mode={selection.mode} incident={selected}
-          nowMs={dashboard.nowMs} client={dashboard.incidentClient} operatorToken={operatorToken}
+          nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision} operatorToken={operatorToken}
           runAnalysis={dashboard.runAnalysis} sseRevision={dashboard.sseRevision}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}

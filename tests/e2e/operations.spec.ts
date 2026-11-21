@@ -67,7 +67,7 @@ test("лента и звук реагируют на новый инцидент
 
     await feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" }).click();
     const dialog = page.getByRole("dialog", { name: "Новый тестовый инцидент в витрине" });
-    await expect(dialog.getByText("INC001000000001")).toBeVisible();
+    await expect(dialog.getByText("INC001000000001", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(feed.getByRole("button", { name: "Новый тестовый инцидент в витрине" })).toBeFocused();
     await page.keyboard.press("Escape");

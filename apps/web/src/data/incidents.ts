@@ -49,9 +49,9 @@ function invalidResponse(): never {
   throw new DashboardRequestError("INVALID_INCIDENT_RESPONSE", "Ответ реестра ITSM не прошёл проверку");
 }
 
-export function detailQuery(client: IncidentClient, id: string, version?: Incident["version"]) {
+export function detailQuery(client: IncidentClient, id: string, version?: Incident["version"], revision?: number) {
   return queryOptions({
-    queryKey: ["incident-detail", id, version],
+    queryKey: ["incident-detail", id, version, revision],
     queryFn: ({ signal }) => client.detail(id, signal),
     staleTime: Infinity,
     retry: false,

@@ -193,7 +193,13 @@ test("A8 открывает ITSM по шаблону и локальный ад�
   await expect(localCard.getByRole("link", { name: "В ITSM" })).toHaveAttribute("target", "_blank");
   await localCard.getByRole("button", { name: "Подробнее" }).click();
   await expect(page.getByRole("dialog").getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", localHref);
-  await expect(page.getByText("Ссылка ITSM не настроена")).toHaveCount(0);
+  const localPopupPromise = page.waitForEvent("popup");
+  await page.getByRole("dialog").getByRole("link", { name: "В ITSM" }).click();
+  const localPopup = await localPopupPromise;
+  await expect(localPopup).toHaveURL(local.url + localHref);
+  await expect(localPopup.getByRole("heading", { name: "Перебои доставки уведомлений", exact: true })).toBeVisible();
+  await expect(localPopup.getByRole("main").getByText("INC000000000003", { exact: true })).toBeVisible();
+  await localPopup.close();
 });
 
 test("A9 сохраняет последний снимок при битом и отсутствующем файле", async ({ page }) => {
