@@ -2,7 +2,7 @@ import { AssignCoordinatorSchema } from "@mts/contracts";
 import { expect, test, type Page } from "@playwright/test";
 import { DashboardRequestError } from "../../apps/web/src/data/api";
 import { createIncidentFixtures } from "../../apps/web/src/data/incident-fixtures";
-import { OPERATOR_TOKEN, startDashboard } from "./support/harness.js";
+import { openService, OPERATOR_TOKEN, returnToBoard, startDashboard } from "./support/harness.js";
 
 const ID = "INC000000000001";
 const card = (page: Page, id = ID) => page.locator(`[data-incident-id="${id}"]`);
@@ -138,8 +138,8 @@ test("D13 отправляет версию и UUID, восстанавлива�
     await page.goto(`${app.url}/admin/incidents`);
     await expect(count(page)).toHaveCount(24);
     allowEvents = false;
-    await page.getByText("Служебное", { exact: true }).click();
-    await page.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+    await (await openService(page)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+    await returnToBoard(page);
 
     const assign = card(page).getByRole("button", { name: "Назначить координатора" });
     await assign.click();

@@ -4,6 +4,11 @@ import { describeImportIssues } from "../import-validation";
 const row = { id: "INC7", priorityId: 3, submitDate: "2026-11-21T09:00:00Z" };
 
 describe("диагностика импорта", () => {
+  it("принимает категорию «Наивысший» без числового приоритета", () => {
+    const json = JSON.stringify([{ id: row.id, submitDate: row.submitDate, "Категория": "Наивысший" }]);
+    expect(describeImportIssues(json, [])).toEqual([]);
+  });
+
   it("показывает все ошибки с путями и идентификаторами поверх сокращённого ответа D24", () => {
     const rows = Array.from({ length: 24 }, (_, index) => ({ ...row, id: `INC-${index}`, priorityId: "3" }));
     const messages = Array.from({ length: 20 }, (_, index) => `Запись ${index + 1}, поле priorityId: некорректное значение.`);

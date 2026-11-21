@@ -1,4 +1,5 @@
 import type { Coordinator, RawIncidentFields } from "@mts/contracts";
+import type { Page } from "@playwright/test";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { access, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -13,6 +14,15 @@ export const OPERATOR_TOKEN = "e2e-operator-token";
 const LIVE_FILENAME = "character_problems.json";
 const START_JS = join(REPO_ROOT, "apps/api/dist/start.js");
 const STEP_JS = join(REPO_ROOT, "apps/api/dist/demo/cli/step.js");
+
+export async function openService(page: Page) {
+  await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Разработчикам" }).click();
+  return page.getByRole("region", { name: "Служебное" });
+}
+
+export async function returnToBoard(page: Page) {
+  await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Пульт", exact: true }).click();
+}
 
 const tracked = new Set<ChildProcess>();
 process.on("exit", () => {

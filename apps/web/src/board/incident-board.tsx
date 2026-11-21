@@ -1,12 +1,17 @@
 import type { Incident } from "@mts/contracts";
-import { ArrowUpRight, Clock, ShieldAlert, Timer, Minus, SignalLow } from "lucide-react";
+import { Icon, type IconName } from "../icons";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
 import { displayText, incidentCoordinator, PRIORITIES, priorityQueues } from "./model";
 import type { IncidentAlert } from "../operations/activity";
 import styles from "./board.module.css";
 
-const groupIcons = { 4: ShieldAlert, 3: Timer, 2: Minus, 1: SignalLow };
+const groupIcons = {
+  4: "shield-exclamation",
+  3: "stopwatch",
+  2: "dash-lg",
+  1: "reception-1",
+} satisfies Record<Incident["priority"], IconName>;
 
 export function IncidentBoard({
   incidents,
@@ -26,11 +31,10 @@ export function IncidentBoard({
     <div className={styles.board}>
       {PRIORITIES.map(({ id: key, title, label }) => {
         const cards = queues[key];
-        const Icon = groupIcons[key];
         return (
           <section className={styles.group} key={key} aria-label={title} data-surface="surface" data-group={key}>
             <header className={styles.groupHead}>
-              <span className={styles.groupIcon}><Icon size={16} aria-hidden /></span>
+              <span className={styles.groupIcon}><Icon name={groupIcons[key]} /></span>
               <h2>{title}</h2>
               <span className={styles.count} data-numeric="tabular">{cards.length}</span>
             </header>
@@ -98,7 +102,7 @@ function IncidentCard({
       </div>
       <div className={styles.cardFooter}>
         <p className={styles.time} data-numeric="tabular" title={sla.hint}>
-          <Clock size={14} aria-hidden />
+          <Icon name="clock" size={14} />
           <span>{sla.status}</span>
           {sla.duration ? <span>{sla.duration}</span> : null}
         </p>
@@ -107,7 +111,7 @@ function IncidentCard({
             {coordinator ? "Сменить координатора" : "Назначить координатора"}
           </button>
           <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
-            В ITSM <ArrowUpRight size={14} aria-hidden />
+            В ITSM <Icon name="box-arrow-up-right" size={14} />
           </a>
           <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id)}>
             Подробнее

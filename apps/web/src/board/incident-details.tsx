@@ -1,10 +1,10 @@
 import type { AnalysisResult, FullTicketDetail, Incident, RawIncidentFields } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { AnalysisPanel } from "../analysis";
 import { coordinatorQuery, detailQuery, type IncidentClient } from "../data/incidents";
+import { Icon } from "../icons";
 import { CoordinatorForm } from "./coordinator-form";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
@@ -71,7 +71,7 @@ export function IncidentDetails({ id, incident, mode, nowMs, client, revision, s
               <Dialog.Title>{title}</Dialog.Title>
               {mode === "assignment" && known ? <p className={styles.subtitle}>{known.title}</p> : null}
             </div>
-            <Dialog.Close className="detail-close" aria-label="Закрыть"><X size={21} aria-hidden /></Dialog.Close>
+            <Dialog.Close className="detail-close" aria-label="Закрыть"><Icon name="x-lg" size={21} /></Dialog.Close>
           </div>
           {mode === "detail" && sla ? (
             <p className="detail-sla" data-tone={sla.tone} data-numeric="tabular" title={sla.hint}>
@@ -105,7 +105,7 @@ export function IncidentDetails({ id, incident, mode, nowMs, client, revision, s
           {mode === "detail" ? (
             <>
               <a className="detail-itsm" href={itsmHref(incident ?? { id, itsmUrl: null })} target="_blank" rel="noopener noreferrer">
-                В ITSM <ArrowUpRight size={16} aria-hidden />
+                В ITSM <Icon name="box-arrow-up-right" />
               </a>
               {record ? <FullRecord detail={record} /> : null}
               {incident ? <AnalysisPanel incident={incident} runAnalysis={runAnalysis} operatorToken={operatorToken} /> : null}

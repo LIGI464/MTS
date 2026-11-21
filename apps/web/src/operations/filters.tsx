@@ -1,7 +1,7 @@
 import { StateSchema, STATE_LABELS, type Coordinator, type Incident, type Priority } from "@mts/contracts";
-import { ListFilter, Search, X } from "lucide-react";
 import { useState } from "react";
 import { PRIORITIES, incidentCoordinator } from "../board/model";
+import { Icon } from "../icons";
 import { DEFAULT_FILTERS, type QueueFilters } from "./queue-summary";
 import styles from "./dashboard.module.css";
 
@@ -45,7 +45,7 @@ export function IncidentFilters({ filters, incidents, coordinators, onChange }: 
       <div className={styles.filterMain}>
         <label className={styles.search}>
           <span className="sr-only">Поиск инцидентов</span>
-          <Search size={17} aria-hidden />
+          <Icon name="search" size={17} />
           <input id="incident-search" type="search" value={filters.search} placeholder="ID, заголовок, продукт или сервис"
             onChange={(event) => onChange({ search: event.target.value })} />
         </label>
@@ -53,10 +53,10 @@ export function IncidentFilters({ filters, incidents, coordinators, onChange }: 
           onChange={(value) => onChange({ status: value as QueueFilters["status"] })} />
         <button type="button" className={styles.control} aria-expanded={expanded} aria-controls="incident-extra-filters"
           onClick={() => setExpanded(!expanded)}>
-          <ListFilter size={17} aria-hidden /> Фильтры{extraCount ? ` (${extraCount})` : ""}
+          <Icon name="filter" size={17} /> Фильтры{extraCount ? ` (${extraCount})` : ""}
         </button>
         <button type="button" className={styles.resetFilter} disabled={!active} onClick={() => onChange(DEFAULT_FILTERS)}>
-          <X size={16} aria-hidden /> Сбросить
+          <Icon name="x-lg" /> Сбросить
         </button>
       </div>
       <div className={styles.quick} role="group" aria-label="Быстрые фильтры">

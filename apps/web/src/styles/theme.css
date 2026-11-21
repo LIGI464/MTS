@@ -1,14 +1,11 @@
 /*
-  Самостоятельная тема пульта по визуальному референсу МТС.
-  Это не Granat Web SDK и не официальные токены.
-  Шрифты подключены текущими @font-face с font-display: swap.
-  Если файлы недоступны, остаётся системный шрифт с кириллицей.
+  Шрифты из корпоративного набора МТС. Локальные файлы загружаются вместе с пультом.
+  https://moskva.mts.ru/about/media-centr/mediabank/korporativnyj-stil
 */
 
 @font-face {
   font-family: "MTS Compact";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.ttf") format("truetype");
+  src: url("./fonts/MTSCompact-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -16,8 +13,7 @@
 
 @font-face {
   font-family: "MTS Compact";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.ttf") format("truetype");
+  src: url("./fonts/MTSCompact-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -25,8 +21,7 @@
 
 @font-face {
   font-family: "MTS Compact";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.ttf") format("truetype");
+  src: url("./fonts/MTSCompact-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -34,8 +29,7 @@
 
 @font-face {
   font-family: "MTS Wide";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.ttf") format("truetype");
+  src: url("./fonts/MTSWide-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -43,8 +37,7 @@
 
 @font-face {
   font-family: "MTS Wide";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.ttf") format("truetype");
+  src: url("./fonts/MTSWide-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -52,8 +45,7 @@
 
 @font-face {
   font-family: "MTS Text";
-  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.woff2") format("woff2"),
-    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.ttf") format("truetype");
+  src: url("./fonts/MTSText-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -108,6 +100,10 @@
   background: var(--canvas);
   font-family: var(--font-sans);
   font-size: var(--text-size);
+}
+
+:where(h1, h2) {
+  font-family: var(--font-display);
 }
 
 [data-surface="canvas"] {

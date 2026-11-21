@@ -6,7 +6,7 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createIncidentFixtures } from "../../apps/web/src/data/incident-fixtures";
-import { OPERATOR_TOKEN, readLive, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
+import { openService, OPERATOR_TOKEN, readLive, returnToBoard, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
 
 const ids = {
   first: "INC000000000001",
@@ -145,7 +145,8 @@ test("D30 проводит сценарии разработчика, персо
     await expect(right.getByRole("region", { name: "Критические", exact: true }).locator(card(right, ids.first))).toHaveCount(1);
     await actions.screenshot({ path: testInfo.outputPath("developers-1440x900.png"), animations: "disabled" });
 
-    await setBoardToken(left);
+    await (await openService(left)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+    await returnToBoard(left);
     await card(left, id).getByRole("button", { name: "Назначить координатора", exact: true }).click();
     await chooseCoordinator(left.getByRole("dialog"), "irina");
     await left.keyboard.press("Escape");
@@ -212,7 +213,7 @@ test("D30 импортирует через живой D24 после конфл
     const baseline = await readFile(join(app.dataDir, "baseline.json"), "utf8");
     const originalBytes = await readLive(app.dataDir);
     const rows = await liveRows(app);
-    await setBoardToken(left);
+    await (await openService(left)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
     await left.getByRole("button", { name: "Загрузить JSON" }).click();
     const dialog = left.getByRole("dialog", { name: "Загрузить JSON" });
     const upload = dialog.getByLabel("Файл JSON", { exact: true });
@@ -235,7 +236,7 @@ test("D30 импортирует через живой D24 после конфл
     expect((await snapshot(right.request, app)).revision).toBe(initial.revision);
     await expect(cards(right)).toHaveCount(3);
 
-    const added = { ...rows[0], id: "SYN-D30-IMPORT", header: "Критический импорт D30", priorityId: 4 };
+    const added = { ...rows[0], id: "SYN-D30-IMPORT", header: "Критический импорт D30", priorityId: 3, Категория: "Наивысший" };
     const updated = rows.filter(({ id }) => id !== ids.archived)
       .map((row) => row.id === ids.first ? { ...row, header: "Обновлено импортом D30" } : row);
     const validText = JSON.stringify([...updated, added]);
@@ -280,8 +281,9 @@ test("D30 импортирует через живой D24 после конфл
     expect(accepted[0]).toBe(accepted[1]);
     await left.unroute(`**${API_PREFIX}/incidents/import/apply`);
     await left.keyboard.press("Escape");
+    await returnToBoard(left);
     for (const board of [left, right]) {
-      await expect(card(board, added.id)).toHaveCount(1);
+      await expect(board.getByRole("region", { name: "Критические", exact: true }).locator(card(board, added.id))).toHaveCount(1);
       await expect(card(board, ids.first).getByText("Обновлено импортом D30")).toBeVisible();
     }
     expect(await readLive(app.dataDir)).toBe(validText);
@@ -299,7 +301,7 @@ test("D30 импортирует через живой D24 после конфл
     expect(await replay.json()).toEqual({ revision: accepted[0] });
     expect((await snapshot(right.request, app)).revision).toBe(accepted[0]);
 
-    await left.getByRole("button", { name: "Загрузить JSON" }).click();
+    await (await openService(left)).getByRole("button", { name: "Загрузить JSON" }).click();
     await upload.setInputFiles(jsonFile("same.json", validText));
     await check.click();
     await expect(preview).toBeVisible();
@@ -315,11 +317,6 @@ async function openBoard(page: Page, app: RunningApp) {
   await page.goto(app.url + dashboard, { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Пульт координатора" })).toBeVisible();
   await expect(page.getByText("Данные актуальны", { exact: true })).toBeVisible();
-}
-
-async function setBoardToken(page: Page) {
-  await page.getByText("Служебное", { exact: true }).click();
-  await page.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
 }
 
 async function runScenario(page: Page, name: string, action: string) {

@@ -1,7 +1,7 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { isActiveState } from "@mts/contracts";
-import { useRef, useState } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 import { itsmHref } from "../board/itsm";
+import { DemoControls } from "../demo";
 import {
   DeveloperRequestError,
   type DeveloperTransport,
@@ -43,13 +43,13 @@ export type DeveloperStand = {
 export function DeveloperPage({
   stand,
   transport,
+  service,
 }: {
   stand: DeveloperStand;
   transport: DeveloperTransport;
+  service: Omit<ComponentProps<typeof DemoControls>, "busy">;
 }) {
   const [session, setSession] = useState<Session>(createSession);
-  const [token, setToken] = useState("");
-  const [confirmReset, setConfirmReset] = useState(false);
   const writing = useRef(false);
   const writable = stand.mode === "live";
   const busy = session.phase === "pending";
@@ -69,13 +69,14 @@ export function DeveloperPage({
     });
     setSession(prepared.state);
     if (!prepared.intent) return;
-    if (token.trim().length === 0) {
+    const token = service.operatorToken?.trim();
+    if (!token) {
       setSession(applyFailure(prepared.state, "token", new Date().toISOString()));
       return;
     }
     writing.current = true;
     try {
-      const receipt = await transport.send(prepared.intent, token.trim());
+      const receipt = await transport.send(prepared.intent, token);
       setSession((current) => applySuccess(current.phase === "pending" ? current : prepared.state, receipt, new Date().toISOString()));
     } catch (caught) {
       const kind = caught instanceof DeveloperRequestError ? caught.kind : "network";
@@ -88,23 +89,19 @@ export function DeveloperPage({
     }
   }
 
-  async function confirmAndReset() {
-    if (writing.current) return;
+  async function confirmAndReset(token: string) {
     const started = beginReset(session);
-    if (started === session) return;
+    if (writing.current || started === session) throw new Error("Дождитесь завершения текущего действия");
     setSession(started);
-    setConfirmReset(false);
-    if (token.trim().length === 0) {
-      setSession(finishReset(started, new Date().toISOString(), false, "token"));
-      return;
-    }
     writing.current = true;
     try {
-      await transport.reset(token.trim());
+      if (stand.mode === "mock") await service.onReset(token);
+      else await transport.reset(token);
       setSession((current) => finishReset(current.phase === "pending" ? current : started, new Date().toISOString(), true));
     } catch (caught) {
       const kind = caught instanceof DeveloperRequestError ? caught.kind : "network";
       setSession((current) => finishReset(current.phase === "pending" ? current : started, new Date().toISOString(), false, kind));
+      throw caught;
     } finally {
       writing.current = false;
     }
@@ -121,6 +118,7 @@ export function DeveloperPage({
       </header>
       {stand.mode === "mock" ? <p className={styles.notice} role="status">{messages.mock}</p> : null}
       {stand.mode === "read" ? <p className={styles.notice} role="status">{messages.read}</p> : null}
+      <DemoControls {...service} busy={busy} onReset={confirmAndReset} />
       <div className={styles.layout}>
         <div className={styles.scenarios} data-surface="ink">
           {ACTION_ORDER.map((action) => (
@@ -144,16 +142,6 @@ export function DeveloperPage({
           ) : null}
         </div>
         <form className={styles.form} data-surface="surface" onSubmit={(event) => event.preventDefault()}>
-          <label className={styles.field}>
-            Токен оператора
-            <input
-              type="password"
-              autoComplete="off"
-              value={token}
-              disabled={busy}
-              onChange={(event) => setToken(event.target.value)}
-            />
-          </label>
           <label className={styles.field}>
             Активная заявка
             <select
@@ -232,25 +220,6 @@ export function DeveloperPage({
             ))}
           </ol>
         )}
-      </section>
-      <section className={styles.reset} aria-label="Сброс демо">
-        <p>{messages.resetHint}</p>
-        <Dialog.Root open={confirmReset} onOpenChange={setConfirmReset}>
-          <Dialog.Trigger asChild>
-            <button type="button" disabled={!writable || busy}>Сбросить демо</button>
-          </Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="overlay" />
-            <Dialog.Content className={styles.confirm} data-surface="surface">
-              <Dialog.Title>Сбросить демо</Dialog.Title>
-              <Dialog.Description>{messages.resetHint}</Dialog.Description>
-              <div className={styles.confirmActions}>
-                <button type="button" onClick={() => void confirmAndReset()}>Подтвердить сброс</button>
-                <Dialog.Close className={styles.reset}>Отмена</Dialog.Close>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
       </section>
     </section>
   );

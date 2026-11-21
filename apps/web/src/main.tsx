@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { useDashboard } from "./data";
 import { DeveloperRoute } from "./developers/developer-route";
 import { ItsmPage } from "./itsm";
 import { registryPath } from "./itsm/api";
+import { useIncidentAlerts } from "./operations/use-incident-alerts";
+import { useIncidentSound } from "./operations/use-incident-sound";
 import { AppShell } from "./shell";
+import { ProjectLink, ProjectNavigation } from "./shell/navigation";
 import "./styles/theme.css";
 import "./styles/base.css";
 
@@ -29,9 +33,48 @@ createRoot(root).render(
 );
 
 function Route() {
-  const pathname = window.location.pathname.replace(/\/$/, "") || "/";
-  if (pathname === "/" || pathname === "/admin/incidents") return <App />;
-  if (pathname === "/admin/developers") return <DeveloperRoute />;
+  const [pathname, setPathname] = useState(readPath);
+  const [operatorToken, onOperatorToken] = useState<string | undefined>();
+
+  useEffect(() => {
+    const updatePath = () => setPathname(readPath());
+    window.addEventListener("popstate", updatePath);
+    return () => window.removeEventListener("popstate", updatePath);
+  }, []);
+
+  function navigate(href: string) {
+    const current = window.location.pathname + window.location.search + window.location.hash;
+    if (current === href) return;
+    window.history.pushState(null, "", href);
+    setPathname(readPath());
+    window.scrollTo(0, 0);
+  }
+
+  return (
+    <ProjectNavigation.Provider value={navigate}>
+      {pathname === "/" || pathname === "/admin/incidents" || pathname === "/admin/developers" ? (
+        <DashboardRoutes developers={pathname === "/admin/developers"}
+          operatorToken={operatorToken} onOperatorToken={onOperatorToken} />
+      ) : (
+        <OtherRoute pathname={pathname} />
+      )}
+    </ProjectNavigation.Provider>
+  );
+}
+
+function DashboardRoutes({ developers, operatorToken, onOperatorToken }: {
+  developers: boolean;
+  operatorToken: string | undefined;
+  onOperatorToken: (token: string | undefined) => void;
+}) {
+  const dashboard = useDashboard();
+  const activity = useIncidentAlerts(dashboard.snapshot, dashboard.newNotices);
+  const sound = useIncidentSound(activity.alert);
+  if (developers) return <DeveloperRoute dashboard={dashboard} operatorToken={operatorToken} onOperatorToken={onOperatorToken} />;
+  return <App dashboard={dashboard} operatorToken={operatorToken} activity={activity} sound={sound} />;
+}
+
+function OtherRoute({ pathname }: { pathname: string }) {
   if (pathname === registryPath) return <AppShell title={null}><ItsmPage /></AppShell>;
 
   const encodedId = pathname.startsWith(registryPath + "/") ? pathname.slice(registryPath.length + 1) : "";
@@ -39,7 +82,11 @@ function Route() {
     const id = decodeId(encodedId);
     if (id) return <AppShell title={null}><ItsmPage id={id} /></AppShell>;
   }
-  return <AppShell title="Страница не найдена"><a href="/admin/incidents">На пульт</a></AppShell>;
+  return <AppShell title="Страница не найдена"><ProjectLink href="/admin/incidents">На пульт</ProjectLink></AppShell>;
+}
+
+function readPath() {
+  return window.location.pathname.replace(/\/$/, "") || "/";
 }
 
 function decodeId(value: string) {

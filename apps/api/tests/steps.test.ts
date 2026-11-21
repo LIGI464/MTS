@@ -17,6 +17,7 @@ describe("demo file steps", () => {
       stateEnum: "Assigned",
       state: "Закрыт",
       priorityId: 3,
+      "Категория": "Высокий",
       submitDate: submitted,
       integration: { flags: [true, "  raw  "] },
     };
@@ -39,6 +40,7 @@ describe("demo file steps", () => {
       {
         ...critical,
         priorityId: 4,
+        "Категория": "Наивысший",
         priority: "Наивысший",
         assignedGroupName: COORDINATOR_TEAM,
         stateEnum: "Resolved",

@@ -41,6 +41,16 @@ describe("raw incident schema", () => {
     ).toThrow(/Повтор id/);
   });
 
+  it.each([
+    [{ "Категория": " Наивысший ", priorityId: undefined }, 4],
+    [{ category: "НАИВЫСШИЙ", priorityId: 3 }, 4],
+    [{ "Категория": "Средний", priorityId: 4 }, 2],
+    [{ "Категория": "Связь", priorityId: 4 }, 4],
+    [{ priority: "Наивысший", priorityId: undefined }, 4],
+  ])("normalizes export priorities from %j to %d", (fields, priorityId) => {
+    expect(RawIncidentSchema.parse({ ...base, ...fields }).priorityId).toBe(priorityId);
+  });
+
   it("keeps stateEnum when stateId carries the swapped dictionary value", () => {
     const resolved = RawIncidentSchema.parse({
       ...base,

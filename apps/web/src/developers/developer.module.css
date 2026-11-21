@@ -133,42 +133,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.reset {
-  padding: var(--space-card);
-  border-radius: var(--radius-card);
-  background: var(--surface);
-}
-
-.reset button,
-.confirm button {
-  font: inherit;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-button);
-  background: var(--surface);
-  color: var(--text);
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.confirm {
-  position: fixed;
-  left: 50%;
-  top: 20vh;
-  width: min(440px, calc(100vw - 32px));
-  transform: translateX(-50%);
-  padding: 16px;
-  border-radius: var(--radius-section);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.confirmActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
 @media (max-width: 800px) {
   .layout {
     grid-template-columns: 1fr;

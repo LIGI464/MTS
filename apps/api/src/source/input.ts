@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   RawIncidentsSchema,
   STATE_LABELS,
+  readExportPriority,
   type Incident,
   type RawIncident,
   type RawIncidentFields,
@@ -20,9 +21,9 @@ export const BASELINE_FILENAME = "baseline.json";
 export function countExportRows(rows: readonly unknown[]) {
   const byPriority = { 1: 0, 2: 0, 3: 0, 4: 0 };
   for (const row of rows) {
-    if (!row || typeof row !== "object" || !("priorityId" in row)) continue;
-    const { priorityId } = row;
-    if (priorityId === 1 || priorityId === 2 || priorityId === 3 || priorityId === 4) byPriority[priorityId]++;
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    const priority = readExportPriority(row as Record<string, unknown>);
+    if (priority !== undefined) byPriority[priority]++;
   }
   return { total: rows.length, byPriority };
 }

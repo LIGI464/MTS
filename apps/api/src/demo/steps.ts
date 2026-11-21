@@ -1,8 +1,8 @@
 import {
   COORDINATOR_TEAM,
-  PRIORITY_LABELS,
   STATE_LABELS,
   isActiveState,
+  markExportAsCritical,
 } from "@mts/contracts";
 import { incidentState, readIncidentBytes } from "../source/input.js";
 
@@ -54,8 +54,7 @@ export function applyDemoStep(bytes: Uint8Array, step: DemoStep, nowMs = Date.no
   const raw = original[target.index];
   switch (step) {
     case "critical":
-      raw.priorityId = 4;
-      raw.priority = PRIORITY_LABELS[4];
+      markExportAsCritical(raw);
       break;
     case "assign":
       raw.assignedGroupName = COORDINATOR_TEAM;

@@ -27,21 +27,14 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   flex: 0 0 auto;
-  color: var(--text);
-  font-weight: 700;
   text-decoration: none;
 }
 
 .brandMark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--brand);
-  color: var(--on-button);
+  display: block;
+  width: auto;
+  height: 42px;
 }
 
 .navigation {
@@ -124,13 +117,6 @@
   padding-block: 17px;
 }
 
-.service {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px 14px;
-}
-
 @media (max-width: 620px) {
   .headerInner {
     flex-wrap: wrap;
@@ -155,11 +141,6 @@
 
   .titleRow {
     margin-bottom: 16px;
-  }
-
-  .footerInner,
-  .service {
-    display: grid;
   }
 }
 

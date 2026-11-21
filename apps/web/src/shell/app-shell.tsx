@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
-import { Activity, ClipboardList, FlaskConical, LayoutDashboard } from "lucide-react";
+import { Icon, type IconName } from "../icons";
+import logo from "./mts-logo.svg";
+import { ProjectLink } from "./navigation";
 import styles from "./shell.module.css";
 
 const sections = [
-  { label: "Пульт", href: "/admin/incidents", icon: LayoutDashboard },
-  { label: "Реестр ITSM", href: "/itsm/incidents", icon: ClipboardList },
-  { label: "Разработчикам", href: "/admin/developers", icon: FlaskConical },
-];
+  { label: "Пульт", href: "/admin/incidents", icon: "grid-1x2" },
+  { label: "Реестр ITSM", href: "/itsm/incidents", icon: "clipboard-data" },
+  { label: "Разработчикам", href: "/admin/developers", icon: "code-slash" },
+] satisfies Array<{ label: string; href: string; icon: IconName }>;
 
 export function AppShell({
   children,
@@ -29,20 +31,19 @@ export function AppShell({
     <div className={styles.shell} data-surface="canvas">
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <a href="/admin/incidents" className={styles.brand} aria-label="Кейс МТС — пульт координатора">
-            <span className={styles.brandMark}><Activity size={23} aria-hidden /></span>
-            <span>Кейс МТС</span>
-          </a>
+          <ProjectLink href="/admin/incidents" className={styles.brand} aria-label="МТС — пульт координатора">
+            <img src={logo} alt="" className={styles.brandMark} />
+          </ProjectLink>
           <nav className={styles.navigation} aria-label="Разделы проекта">
-            {sections.map(({ label, href, icon: Icon }) => (
-              <a
+            {sections.map(({ label, href, icon }) => (
+              <ProjectLink
                 key={href}
                 href={href}
                 aria-current={pathname === href || pathname.startsWith(href + "/") ? "page" : undefined}
               >
-                <Icon size={17} aria-hidden />
+                <Icon name={icon} size={17} />
                 {label}
-              </a>
+              </ProjectLink>
             ))}
           </nav>
           {headerActions ? <div className={styles.headerActions}>{headerActions}</div> : null}
@@ -60,7 +61,7 @@ export function AppShell({
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <span>goida-code · Кейс МТС</span>
-          {footerSlot ? <div className={styles.service}>{footerSlot}</div> : null}
+          {footerSlot}
         </div>
       </footer>
     </div>

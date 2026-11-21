@@ -92,3 +92,44 @@ test("показатели сводки фильтруют очереди и в�
   await page.getByRole("button", { name: "Сбросить", exact: true }).click();
   await expect(high.locator("article")).toHaveCount(5);
 });
+
+test("события можно закрепить, отфильтровать и открепить после перезагрузки", async ({ page }) => {
+  const app = await startDashboard();
+  try {
+    await page.goto(`${app.url}/admin/incidents`);
+    await expect(page.getByText("Данные актуальны")).toBeVisible();
+
+    const records = JSON.parse(await readLive(app.dataDir)) as Array<Record<string, unknown>>;
+    records.push({ ...records[0], id: "INC001000000002", header: "Новый инцидент для закрепления" });
+    records[0] = { ...records[0], priorityId: 4 };
+    await writeLive(app.dataDir, JSON.stringify(records));
+
+    const trigger = page.getByRole("button", { name: /^События/ });
+    const feed = page.getByRole("dialog", { name: "События" });
+    const filter = feed.getByRole("combobox", { name: "Тип события" });
+    await trigger.click();
+    await feed.getByRole("button", { name: "Закрепить событие «Новый инцидент»", exact: true }).click();
+    await feed.getByRole("button", { name: "Закрепить событие «Новый критический инцидент»", exact: true }).click();
+    await filter.selectOption({ label: "Закрепленные" });
+    await expect(feed.getByRole("listitem")).toHaveCount(2);
+
+    await page.reload();
+    await trigger.click();
+    await expect(feed.getByRole("listitem")).toHaveCount(2);
+    await filter.selectOption({ label: "Закрепленные" });
+    await expect(feed.getByRole("listitem")).toHaveCount(2);
+    await expect(feed.getByText("Новый инцидент для закрепления")).toBeVisible();
+
+    await feed.getByRole("button", { name: "Открепить событие «Новый инцидент»", exact: true }).click();
+    await expect(feed.getByRole("listitem")).toHaveCount(1);
+    await expect(filter).toBeFocused();
+    await filter.selectOption("critical.new");
+    await expect(feed.getByRole("listitem")).toHaveCount(1);
+    await feed.getByRole("button", { name: "Открепить событие «Новый критический инцидент»", exact: true }).click();
+    await expect(feed.getByRole("button", { name: "Закрепить событие «Новый критический инцидент»", exact: true })).toBeVisible();
+    await filter.selectOption({ label: "Закрепленные" });
+    await expect(feed.getByText("Нет закрепленных событий")).toBeVisible();
+  } finally {
+    await app.stop();
+  }
+});

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { COORDINATOR_TEAM, PRIORITY_LABELS, STATE_LABELS, isActiveState, type AssignCoordinator, type ResolveIncident, type ScenarioCommand } from "@mts/contracts";
+import {
+  COORDINATOR_TEAM, PRIORITY_LABELS, STATE_LABELS, isActiveState, markExportAsCritical,
+  type AssignCoordinator, type ResolveIncident, type ScenarioCommand,
+} from "@mts/contracts";
 import { resolvedFields } from "../demo/steps.js";
 import type { SourceRecord } from "../source/input.js";
 
@@ -61,8 +64,7 @@ export function planMutation(
   const raw = { ...rows[index] };
   switch (command.action) {
     case "escalate":
-      raw.priorityId = 4;
-      raw.priority = PRIORITY_LABELS[4];
+      markExportAsCritical(raw);
       break;
     case "assign":
       if (records[index].incident.team !== COORDINATOR_TEAM) {

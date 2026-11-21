@@ -1,6 +1,6 @@
-import type { Snapshot } from "@mts/contracts";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useRef, useState } from "react";
+import { Icon } from "../icons";
 import { ImportDialog } from "./import-dialog";
 import { isTokenError, reduceReset, type ResetView } from "./state";
 import styles from "./demo.module.css";
@@ -11,6 +11,7 @@ export function DemoControls({
   importEnabled,
   sseRevision,
   reconnecting,
+  busy,
   operatorToken,
   onOperatorToken,
   onReset,
@@ -20,9 +21,10 @@ export function DemoControls({
   importEnabled: boolean;
   sseRevision: number | null;
   reconnecting: boolean;
+  busy: boolean;
   operatorToken: string | undefined;
   onOperatorToken: (token: string | undefined) => void;
-  onReset: (token: string) => Promise<Snapshot>;
+  onReset: (token: string) => Promise<unknown>;
 }) {
   const [resetState, setResetState] = useState<ResetView>({ phase: "idle", message: null });
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -30,7 +32,7 @@ export function DemoControls({
   if (!enabled && !liveAnalysis && !importEnabled) return null;
 
   async function confirmReset() {
-    if (pendingRef.current || resetState.phase === "pending") return;
+    if (pendingRef.current || busy) return;
     if (!operatorToken || operatorToken.trim().length === 0) {
       setResetState((current) => reduceReset(current, { type: "token-rejected" }));
       setConfirmOpen(false);
@@ -39,7 +41,7 @@ export function DemoControls({
     pendingRef.current = true;
     setResetState((current) => reduceReset(current, { type: "submit" }));
     try {
-      await onReset(operatorToken);
+      await onReset(operatorToken.trim());
       setResetState(reduceReset({ phase: "pending", message: null }, { type: "success" }));
       setConfirmOpen(false);
     } catch (caught) {
@@ -57,20 +59,21 @@ export function DemoControls({
   }
 
   return (
-    <details className={styles.service}>
-      <summary>Служебное</summary>
+    <section className={styles.service} aria-labelledby="service-heading">
+      <h2 id="service-heading"><Icon name="gear" size={18} />Служебное</h2>
       <label className={styles.field}>
         Токен оператора
         <input
           type="password"
           autoComplete="off"
+          disabled={busy}
           aria-invalid={resetState.phase === "error" ? true : undefined}
           value={operatorToken ?? ""}
           onChange={(event) => onOperatorToken(event.target.value.length > 0 ? event.target.value : undefined)}
         />
       </label>
       <div className={styles.actions}>
-        <button type="button" onClick={() => onOperatorToken(undefined)}>
+        <button type="button" disabled={busy} onClick={() => onOperatorToken(undefined)}>
           Очистить
         </button>
         {importEnabled ? <ImportDialog operatorToken={operatorToken} sseRevision={sseRevision} reconnecting={reconnecting} /> : null}
@@ -84,7 +87,7 @@ export function DemoControls({
             }}
           >
             <Dialog.Trigger asChild>
-              <button type="button" disabled={resetState.phase === "pending"}>
+              <button type="button" disabled={busy}>
                 Сбросить демо
               </button>
             </Dialog.Trigger>
@@ -93,7 +96,7 @@ export function DemoControls({
               <Dialog.Content className={styles.confirm} data-surface="surface">
                 <Dialog.Title className={styles.confirmTitle}>Сбросить демо</Dialog.Title>
                 <Dialog.Description className={styles.confirmText}>
-                  Сервер вернёт демонстрационный набор к исходной копии.
+                  Сервер вернёт демонстрационный набор к исходной копии. История ITSM сохранится.
                 </Dialog.Description>
                 <div className={styles.actions}>
                   <button type="button" disabled={resetState.phase === "pending"} onClick={() => void confirmReset()}>
@@ -116,6 +119,6 @@ export function DemoControls({
           {resetState.message}
         </p>
       ) : null}
-    </details>
+    </section>
   );
 }

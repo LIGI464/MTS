@@ -87,9 +87,21 @@ test("D10B читает очереди, SLA, пустую очередь и пе
   }
 });
 
-test("D10B оставляет системный шрифт, если файлы MTS не загрузились", async ({ page }) => {
+test("D10B загружает шрифты МТС из приложения и сохраняет резервный шрифт", async ({ page }) => {
   const app = await openApp();
   await page.route("https://static.mts.ru/**", (route) => route.abort());
+  await openDashboard(page, app);
+
+  const loadedFamilies = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.fonts]
+      .filter((face) => face.status === "loaded")
+      .map((face) => face.family.replaceAll('"', ""));
+  });
+  expect(loadedFamilies).toContain("MTS Compact");
+  expect(loadedFamilies).toContain("MTS Wide");
+
+  await page.route("**/*.woff2", (route) => route.abort());
   await openDashboard(page, app);
   const font = await page.evaluate(async () => {
     await document.fonts.ready;

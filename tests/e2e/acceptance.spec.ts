@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { applyDemoStep, OPERATOR_TOKEN, readLive, removeLive, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
+import { applyDemoStep, openService, OPERATOR_TOKEN, readLive, removeLive, returnToBoard, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
 
 const GROUPS = ["Критические", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
 const HIGH_ID = "INC000000000001";
@@ -70,7 +70,7 @@ test("A2 показывает Research по фильтру в одной оче�
   await expect(research.locator("[title='Срок не задан']")).toBeVisible();
 });
 
-test("A3–A6 и A11 проводят critical, assign, deadline, resolve и скрытый сброс", async ({ page }) => {
+test("A3–A6 и A11 проводят critical, assign, deadline, resolve и сброс у разработчиков", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app);
   await expect(page.locator("main").getByRole("button", { name: "Сбросить демо" })).toHaveCount(0);
@@ -99,12 +99,13 @@ test("A3–A6 и A11 проводят critical, assign, deadline, resolve и с�
   await expect(critical).toBeVisible();
   await page.getByRole("button", { name: "Сбросить", exact: true }).click();
 
-  const reset = page.getByRole("button", { name: "Сбросить демо" });
-  await expect(reset).toBeHidden();
-  await page.getByText("Служебное", { exact: true }).click();
-  await page.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
-  await reset.click();
+  await expect(page.getByRole("button", { name: "Сбросить демо" })).toHaveCount(0);
+  const service = await openService(page);
+  await service.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+  await service.getByRole("button", { name: "Сбросить демо" }).click();
   await page.getByRole("button", { name: "Подтвердить сброс" }).click();
+  await expect(service.getByRole("status")).toHaveText("Набор восстановлен");
+  await returnToBoard(page);
   await expect(page.locator(".toasts").getByText("Набор восстановлен")).toBeVisible();
   await expect(group(page, "Критические").getByText("Нет инцидентов")).toBeVisible();
   await expect(group(page, "Критические").getByText(HIGH_ID)).toHaveCount(0);
@@ -141,8 +142,8 @@ test("A7 показывает локальные правила, мок codex.sa
 
   const live = await openApp("live-ok");
   await openDashboard(page, live);
-  await page.getByText("Служебное", { exact: true }).click();
-  await page.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+  await (await openService(page)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+  await returnToBoard(page);
   await analyze(page, "Высокий приоритет", HIGH_ID);
   await expect(analysis(page).getByText("Выжимка мок-провайдера для координатора.")).toBeVisible();
   await expect(analysis(page).getByText("codex.sale")).toBeVisible();
@@ -151,8 +152,8 @@ test("A7 показывает локальные правила, мок codex.sa
 
   const fallback = await openApp("live-fail");
   await openDashboard(page, fallback);
-  await page.getByText("Служебное", { exact: true }).click();
-  await page.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+  await (await openService(page)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
+  await returnToBoard(page);
   await analyze(page, "Высокий приоритет", HIGH_ID);
   await expect(analysis(page).getByText("Локальные правила")).toBeVisible();
   await expect(analysis(page).getByText("Ошибка поставщика")).toBeVisible();
@@ -284,8 +285,9 @@ test("A13 сохраняет рабочую навигацию и служебн
   const footer = page.getByRole("contentinfo");
   await expect(footer.getByText("goida-code · Кейс МТС")).toBeVisible();
   await expect(footer.getByRole("link")).toHaveCount(0);
-  await footer.getByText("Служебное", { exact: true }).click();
-  await expect(footer.getByLabel("Токен оператора")).toBeVisible();
+  await expect(footer.getByText("Служебное", { exact: true })).toHaveCount(0);
+  await expect((await openService(page)).getByLabel("Токен оператора")).toBeVisible();
+  await returnToBoard(page);
 
   const details = card(page, "Высокий приоритет", HIGH_ID).getByRole("button", { name: "Подробнее" });
   await details.click();

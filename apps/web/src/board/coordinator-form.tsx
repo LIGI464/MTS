@@ -2,11 +2,13 @@ import { AssignCoordinatorSchema, type AssignCoordinator, type CoordinatorList, 
 import { useRef, useState } from "react";
 import { DashboardRequestError } from "../data/api";
 import type { IncidentClient } from "../data/incidents";
+import { ProjectLink } from "../shell/navigation";
 import styles from "./detail.module.css";
 import { incidentCoordinator } from "./model";
 
 type Feedback =
   | { phase: "idle" | "saving" }
+  | { phase: "token-required" }
   | { phase: "conflict" | "error"; message: string }
   | { phase: "sent"; revision: number };
 
@@ -35,7 +37,7 @@ export function CoordinatorForm({ id, detail, coordinators, client, operatorToke
   async function save() {
     if (disabled || !detail || !choice || choice === current?.id || inFlight.current) return;
     if (!client.mock && !operatorToken?.trim()) {
-      setFeedback({ phase: "error", message: "Введите токен оператора в разделе «Служебное»." });
+      setFeedback({ phase: "token-required" });
       return;
     }
     const expectedVersion = detail.ticket.version;
@@ -99,6 +101,9 @@ export function CoordinatorForm({ id, detail, coordinators, client, operatorToke
       ) : null}
       {pending ? <p role="status">{feedback.phase === "saving" ? "Сохранение…" : "Ожидаем обновление от сервера…"}</p> : null}
       {confirmed ? <p role="status">Координатор обновлён</p> : null}
+      {feedback.phase === "token-required" ? (
+        <p role="alert">Введите токен оператора в разделе «Служебное» на странице <ProjectLink href="/admin/developers">«Разработчикам»</ProjectLink>.</p>
+      ) : null}
       {feedback.phase === "conflict" || feedback.phase === "error" ? <p role="alert">{feedback.message}</p> : null}
       {conflicted ? (
         <button type="button" className={styles.button} disabled={reloading} onClick={() => void refresh()}>

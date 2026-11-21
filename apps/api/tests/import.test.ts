@@ -20,7 +20,7 @@ const common = { stateEnum: "Assigned", submitDate: "2034-06-03 11:30:00" };
 const primary = { ...common, id: "SYN-D24/A", priorityId: 1, solution: "Решение A", ext: { values: [false, 0, null] } };
 const removed = { ...common, id: "SYN-D24/B", priorityId: 2, stateEnum: "Closed", stateId: 10, solution: "Решение B" };
 const stable = { ...common, id: "SYN-D24/C", priorityId: 3, description: `Синтетический экспорт ${"x".repeat(12 * 1024)}` };
-const added = { ...common, id: "SYN-D24/D", priorityId: 4, sysId: "00090071992547409939999", deadline: "" };
+const added = { ...common, id: "SYN-D24/D", "Категория": "Наивысший", sysId: "00090071992547409939999", deadline: "" };
 const edited = { ...primary, solution: "Новое решение A" };
 const reorderedStable = Object.fromEntries(Object.entries(stable).reverse());
 const original = JSON.stringify([primary, removed, stable]);
@@ -106,7 +106,7 @@ describe("D24 import endpoints", () => {
       ['{"synthetic-private-sample":', /JSON/, 0, { 1: 0, 2: 0, 3: 0, 4: 0 }],
       ["{}", /массив/, 0, { 1: 0, 2: 0, 3: 0, 4: 0 }],
       [JSON.stringify([primary, { ...primary, id: ` ${primary.id} ` }]), /Запись 2.*ID уже встречался/, 2, { 1: 2, 2: 0, 3: 0, 4: 0 }],
-      [JSON.stringify([primary, { ...added, priorityId: 0 }]), /Запись 2.*priorityId/, 2, { 1: 1, 2: 0, 3: 0, 4: 0 }],
+      [JSON.stringify([primary, { ...added, "Категория": undefined, priorityId: 0 }]), /Запись 2.*priorityId/, 2, { 1: 1, 2: 0, 3: 0, 4: 0 }],
     ] as const) {
       const response = await submitPreview(text);
       expect(response.statusCode).toBe(200);
@@ -160,6 +160,7 @@ describe("D24 import endpoints", () => {
       const event = await nextSnapshot();
       expect(event.revision).toBe(receipt.revision);
       expect(event.incidents.map(({ id }) => id)).toEqual([primary.id, stable.id, added.id]);
+      expect(event.groups.critical).toEqual([added.id]);
       expect(event.notices).toMatchObject([{ kind: "critical.new", incidentId: added.id }]);
     } finally {
       await reader.cancel();

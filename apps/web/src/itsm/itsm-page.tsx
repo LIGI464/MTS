@@ -1,8 +1,8 @@
 import { PRIORITY_LABELS, isActiveState, type HistoryEntry, type TicketDetail, type TicketSummary } from "@mts/contracts";
 import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, History, Search } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { formatMoscow } from "../board/format";
+import { Icon } from "../icons";
 import { fetchRegistry, fetchTicket, ItsmRequestError, registryPath, ticketPath } from "./api";
 import { filterTickets } from "./model";
 import { ResolvePanel } from "./resolve-panel";
@@ -33,7 +33,7 @@ export function ItsmPage({ id, revision, operatorEnabled, operatorToken }: ItsmP
       <header className={styles.masthead}>
         <div className={styles.mastheadInner}>
           <p className={styles.brand}><strong>Локальная ITSM</strong><span>Команда goida-code</span></p>
-          <a className={styles.dashboardLink} href="/admin/incidents">На пульт <ArrowRight size={16} aria-hidden="true" /></a>
+          <a className={styles.dashboardLink} href="/admin/incidents">На пульт <Icon name="arrow-right" /></a>
         </div>
       </header>
       <div className={styles.container}>
@@ -74,7 +74,7 @@ function Registry({ revision }: { revision: number | null }) {
           <div className={styles.search}>
             <label htmlFor={searchId}>Поиск обращений</label>
             <div className={styles.searchControl}>
-              <Search size={19} aria-hidden="true" />
+              <Icon name="search" size={19} />
               <input type="search" id={searchId} value={search} onChange={(event) => setSearch(event.target.value)}
                 placeholder="Номер, название или продукт" />
             </div>
@@ -149,7 +149,7 @@ function TicketPage({ id, revision, operatorToken, onLocalToken }: {
 
   return (
     <article>
-      <a className={styles.back} href={registryPath}><ArrowLeft size={17} aria-hidden="true" /> К реестру</a>
+      <a className={styles.back} href={registryPath}><Icon name="arrow-left" size={17} /> К реестру</a>
       <div className={styles.pageTitle}>
         <p className={styles.incidentId}>{id}</p>
         <h1>{missing ? "Заявка не найдена" : detail?.ticket.title ?? "Карточка обращения"}</h1>
@@ -212,7 +212,7 @@ function Timeline({ entries }: { entries: HistoryEntry[] }) {
   return (
     <section className={styles.timeline} aria-labelledby={label}>
       <div className={styles.timelineHead}>
-        <History size={20} aria-hidden="true" /><h2 id={label}>Хронология</h2><span>МСК</span>
+        <Icon name="clock-history" size={20} /><h2 id={label}>Хронология</h2><span>МСК</span>
       </div>
       {entries.length === 0 ? <p>Изменений пока нет.</p> : (
         <ol>

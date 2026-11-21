@@ -4,7 +4,7 @@ import {
 } from "@mts/contracts";
 import { expect, test, type Page } from "@playwright/test";
 import { createIncidentFixtures } from "../../apps/web/src/data/incident-fixtures";
-import { OPERATOR_TOKEN, startDashboard, type RunningApp } from "./support/harness.js";
+import { OPERATOR_TOKEN, returnToBoard, startDashboard, type RunningApp } from "./support/harness.js";
 
 const example = createIncidentFixtures(Date.now()).initial;
 const importedTitle = "Сбои регистрации SIM после обновления";
@@ -79,7 +79,10 @@ for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) 
     await expect(dialog.getByRole("status")).toHaveText("Импорт завершён. Ревизия 2 принята.");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Загрузить JSON" })).toBeFocused();
+    await returnToBoard(page);
     await expect(page.locator("[data-incident-id]").filter({ hasText: importedTitle })).toHaveCount(1);
+    await page.getByRole("button", { name: /^События/ }).click();
+    await expect(page.getByRole("dialog", { name: "События" }).getByRole("button", { name: importedTitle })).toBeVisible();
     expect(fixture.applyRequests).toHaveLength(1);
   });
 }
@@ -87,12 +90,11 @@ for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) 
 test("D14 раздельно определяет доступность импорта и сброса", async ({ page }) => {
   await useImportFixture(page, { importAvailable: false, resetAvailable: true });
   const probe = page.waitForResponse((response) => response.url().endsWith("/import/preview") && response.status() === 404);
-  await page.goto(`${app.url}/admin/incidents`);
+  await page.goto(`${app.url}/admin/developers`);
   await probe;
-  const footer = page.getByRole("contentinfo");
-  await footer.getByText("Служебное", { exact: true }).click();
-  await expect(footer.getByRole("button", { name: "Сбросить демо" })).toBeVisible();
-  await expect(footer.getByRole("button", { name: "Загрузить JSON" })).toHaveCount(0);
+  const service = page.getByRole("region", { name: "Служебное" });
+  await expect(service.getByRole("button", { name: "Сбросить демо" })).toBeVisible();
+  await expect(service.getByRole("button", { name: "Загрузить JSON" })).toHaveCount(0);
 });
 
 test("D14 восстанавливается после отказа доступа, сетевого сбоя и конфликта ревизии", async ({ page }) => {
@@ -136,12 +138,11 @@ test("D14 восстанавливается после отказа досту�
 });
 
 async function openImport(page: Page, token = OPERATOR_TOKEN) {
-  await page.goto(`${app.url}/admin/incidents`);
-  const footer = page.getByRole("contentinfo");
-  await footer.getByText("Служебное", { exact: true }).click();
-  await expect(footer.getByRole("button", { name: "Сбросить демо" })).toHaveCount(0);
-  await footer.getByLabel("Токен оператора").fill(token);
-  await footer.getByRole("button", { name: "Загрузить JSON" }).click();
+  await page.goto(`${app.url}/admin/developers`);
+  const service = page.getByRole("region", { name: "Служебное" });
+  await service.getByLabel("Токен оператора").fill(token);
+  await expect(service.getByRole("button", { name: "Сбросить демо" })).toHaveCount(0);
+  await service.getByRole("button", { name: "Загрузить JSON" }).click();
   return page.getByRole("dialog", { name: "Загрузить JSON" });
 }
 

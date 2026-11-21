@@ -1,21 +1,19 @@
 import type { Notice, Snapshot } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IncidentBoard } from "./board";
 import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
-import { useDashboard, type DemoStep } from "./data";
-import { fetchImportAvailability } from "./data/import-api";
+import type { DemoStep, useDashboard } from "./data";
 import { coordinatorQuery } from "./data/incidents";
-import { DemoControls } from "./demo";
+import { Icon } from "./icons";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
 import { DEFAULT_FILTERS, summarizeQueues, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
-import { useIncidentAlerts } from "./operations/use-incident-alerts";
-import { useIncidentSound } from "./operations/use-incident-sound";
+import type { useIncidentAlerts } from "./operations/use-incident-alerts";
+import type { useIncidentSound } from "./operations/use-incident-sound";
 import operationsStyles from "./operations/dashboard.module.css";
 import { AppShell } from "./shell";
 import { EventsButton } from "./shell/events-button";
@@ -24,9 +22,12 @@ const STEPS: Array<[DemoStep, string]> = [
   ["critical", "Критический"], ["assign", "Назначение"], ["deadline", "Срок"], ["resolve", "Решение"],
 ];
 
-export function App() {
-  const dashboard = useDashboard();
-  const [operatorToken, setOperatorToken] = useState<string | undefined>(undefined);
+export function App({ dashboard, operatorToken, activity, sound }: {
+  dashboard: ReturnType<typeof useDashboard>;
+  operatorToken: string | undefined;
+  activity: ReturnType<typeof useIncidentAlerts>;
+  sound: ReturnType<typeof useIncidentSound>;
+}) {
   const [selection, setSelection] = useState<{ id: string; mode: "detail" | "assignment" } | null>(null);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
   const opener = useRef<HTMLElement | null>(null);
@@ -34,16 +35,9 @@ export function App() {
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
   const selected = incidents.find(({ id }) => id === selection?.id);
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
-  const importAvailability = useQuery({
-    queryKey: ["incident-import-availability"],
-    enabled: Boolean(snapshot) && dashboard.connection !== "mock",
-    queryFn: ({ signal }) => fetchImportAvailability(signal),
-    staleTime: 60_000,
-  });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient, snapshot?.revision);
   const summary = summarizeQueues(incidents, dashboard.nowMs);
-  const { events, alert, highlight, unreadCount, markRead } = useIncidentAlerts(snapshot, dashboard.newNotices);
-  const sound = useIncidentSound(alert);
+  const { events, highlight, unreadCount, markRead } = activity;
   const resetSeq = dashboard.newNotices.findLast((notice) => notice.kind === "demo.reset")?.seq;
 
   useEffect(() => {
@@ -85,21 +79,13 @@ export function App() {
           {badgeText(dashboard.connection, snapshot)}
         </span>
       }
-      footerSlot={
-        <>
-          <DemoControls enabled={snapshot?.capabilities.demoReset ?? false}
-            liveAnalysis={snapshot?.capabilities.liveAnalysis ?? false} operatorToken={operatorToken}
-            importEnabled={importAvailability.data === true} sseRevision={dashboard.sseRevision}
-            reconnecting={dashboard.connection === "reconnecting"} onOperatorToken={setOperatorToken} onReset={dashboard.resetDemo} />
-          {dashboard.stepMock ? (
-            <div className="mock-steps">
-              {STEPS.map(([step, label]) => (
-                <button key={step} type="button" onClick={() => dashboard.stepMock?.(step)}>{label}</button>
-              ))}
-            </div>
-          ) : null}
-        </>
-      }
+      footerSlot={dashboard.stepMock ? (
+        <div className="mock-steps">
+          {STEPS.map(([step, label]) => (
+            <button key={step} type="button" onClick={() => dashboard.stepMock?.(step)}>{label}</button>
+          ))}
+        </div>
+      ) : null}
     >
       {snapshot?.source.status === "stale" ? (
         <p className="banner" role="status">Показан последний сохранённый снимок. Источник устарел.</p>
@@ -114,7 +100,7 @@ export function App() {
             <article key={notice.seq} className={notice.kind === "critical.resolved" ? "toast resolved" : "toast"}>
               <p>{noticeLine(notice)}</p>
               <button type="button" aria-label="Закрыть оповещение" onClick={() => dashboard.dismissNotice(notice.seq)}>
-                <X size={16} aria-hidden />
+                <Icon name="x-lg" size={16} />
               </button>
             </article>
           ))}

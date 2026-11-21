@@ -28,6 +28,7 @@ export {
   PRIORITY_LABELS,
   STATE_LABELS,
 } from "./constants.js";
+export { markExportAsCritical, readExportPriority } from "./export-priority.js";
 export { makeMockTimeline } from "./mock.js";
 export {
   AnalysisResultSchema,

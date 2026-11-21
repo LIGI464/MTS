@@ -1,10 +1,16 @@
 .service {
+  padding: var(--space-section);
+  border-radius: var(--radius-section);
+  background: var(--surface);
   color: var(--text);
 }
 
-.service summary {
-  cursor: pointer;
-  font-weight: 500;
+.service h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--incident-size);
 }
 
 .field {

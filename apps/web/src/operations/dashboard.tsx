@@ -1,13 +1,13 @@
-import { Activity, AlarmClock, Bell, BellOff, ShieldAlert, TimerOff } from "lucide-react";
+import { Icon, type IconName } from "../icons";
 import type { QueueFilters, QueueSummary } from "./queue-summary";
 import styles from "./dashboard.module.css";
 
 const metrics = {
-  active: { label: "Активные", icon: Activity, tone: "info" },
-  critical: { label: "Критические", icon: ShieldAlert, tone: "critical" },
-  near: { label: "Срок близко", icon: AlarmClock, tone: "warning" },
-  overdue: { label: "Просрочены", icon: TimerOff, tone: "critical" },
-} as const;
+  active: { label: "Активные", icon: "activity", tone: "info" },
+  critical: { label: "Критические", icon: "shield-exclamation", tone: "critical" },
+  near: { label: "Срок близко", icon: "alarm", tone: "warning" },
+  overdue: { label: "Просрочены", icon: "hourglass-bottom", tone: "critical" },
+} satisfies Record<keyof QueueSummary, { label: string; icon: IconName; tone: string }>;
 
 export function SoundButton({ enabled, unavailable, activating, toggle }: {
   enabled: boolean;
@@ -15,11 +15,10 @@ export function SoundButton({ enabled, unavailable, activating, toggle }: {
   activating: boolean;
   toggle: () => void;
 }) {
-  const Icon = enabled ? Bell : BellOff;
   return (
     <button type="button" className={styles.sound} aria-label="Звук оповещений"
       aria-pressed={enabled} disabled={activating} onClick={toggle}>
-      <Icon size={17} aria-hidden />
+      <Icon name={enabled ? "bell" : "bell-slash"} size={17} />
       <span>{unavailable ? "Звук недоступен" : enabled ? "Звук вкл." : "Звук выкл."}</span>
     </button>
   );
@@ -33,14 +32,14 @@ export function DashboardMetrics({ summary, filters, onChange }: {
   return (
     <div className={styles.metrics} role="group" aria-label="Сводка инцидентов">
       {(Object.keys(metrics) as (keyof QueueSummary)[]).map((key) => {
-        const { icon: Icon, label, tone } = metrics[key];
+        const { icon, label, tone } = metrics[key];
         const content = (
           <>
             <span className={styles.metricText}>
               <span>{label}</span>
               <strong data-numeric="tabular">{summary[key]}</strong>
             </span>
-            <span className={styles.symbol} data-tone={tone}><Icon size={19} aria-hidden /></span>
+            <span className={styles.symbol} data-tone={tone}><Icon name={icon} size={19} /></span>
           </>
         );
         if (key === "near" || key === "overdue") {

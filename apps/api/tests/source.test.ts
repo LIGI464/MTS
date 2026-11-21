@@ -143,7 +143,9 @@ describe("dashboard source runtime", () => {
     expect(source.getSnapshot()).toMatchObject({
       revision: 0, incidents: [], source: { status: "unavailable", lastGoodAt: null },
     });
-    await atomicWrite(livePath, encode([raw("critical", { priorityId: 4, assignedGroupName: COORDINATOR_TEAM })]));
+    await atomicWrite(livePath, encode([
+      raw("critical", { priorityId: undefined, "Категория": "Наивысший", assignedGroupName: COORDINATOR_TEAM }),
+    ]));
     await waitFor(() => expect(source.getSnapshot()).toMatchObject({
       revision: 1,
       source: { status: "ok", lastGoodAt: now },
@@ -187,12 +189,13 @@ describe("dashboard source runtime", () => {
 
   it("loads the last snapshot and journal on restart with broken input and keeps reset sequences increasing", async () => {
     const initial = encode([raw("a")]);
-    const changed = encode([raw("a", { priorityId: 4, description: "Сохранённое описание" })]);
+    const changed = encode([raw("a", { "Категория": "Наивысший", description: "Сохранённое описание" })]);
     await atomicWrite(livePath, initial);
     const first = await start();
     await atomicWrite(livePath, changed);
     await waitFor(() => expect(first.getSnapshot().revision).toBe(2));
     const previous = first.getSnapshot();
+    expect(previous.groups.critical).toEqual(["a"]);
     expect(previous.notices).toMatchObject([{ kind: "critical.new", incidentId: "a" }]);
     await first.close();
 

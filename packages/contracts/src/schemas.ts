@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeUtcInstant } from "./dates.js";
+import { readExportPriority } from "./export-priority.js";
 
 const prioritySchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
 
@@ -47,7 +48,7 @@ const optionalSignal = z
 
 const utcIso = z.string().refine((value) => normalizeUtcInstant(value) === value, "Ожидается UTC ISO");
 
-export const RawIncidentSchema = z.looseObject({
+const rawIncidentShape = z.looseObject({
   id: z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().min(1)),
   sysId: z.string().nullable().optional(),
   header: displayText,
@@ -69,6 +70,13 @@ export const RawIncidentSchema = z.looseObject({
   priority: z.union([z.string(), z.null()]).optional(),
   productUrl: z.union([z.string(), z.null()]).optional(),
 });
+
+export const RawIncidentSchema = z.preprocess((value) => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const row = value as Record<string, unknown>;
+  const priorityId = readExportPriority(row);
+  return priorityId === undefined || priorityId === row.priorityId ? value : { ...row, priorityId };
+}, rawIncidentShape);
 
 export const RawIncidentsSchema = z.array(RawIncidentSchema).superRefine((items, ctx) => {
   const seen = new Set<string>();

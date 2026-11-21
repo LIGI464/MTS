@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { CircleAlert, CircleCheck, Upload, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { DashboardRequestError } from "../data/api";
 import { requestImportApply, requestImportPreview } from "../data/import-api";
+import { Icon } from "../icons";
 import { importFailure, tokenRequired, type ImportState, type ValidPreview } from "./import-state";
 import { describeImportIssues, type ImportIssue } from "./import-validation";
 import styles from "./demo.module.css";
@@ -110,14 +110,14 @@ export function ImportDialog({ operatorToken, sseRevision, reconnecting }: {
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.importDialog} data-surface="surface">
           <header className={styles.importHeader}>
-            <span className={styles.importIcon}><Upload size={20} aria-hidden /></span>
+            <span className={styles.importIcon}><Icon name="upload" size={20} /></span>
             <div>
               <Dialog.Title className={styles.importTitle}>Загрузить JSON</Dialog.Title>
               <Dialog.Description className={styles.importDescription}>
                 Проверьте выгрузку инцидентов перед заменой рабочего набора.
               </Dialog.Description>
             </div>
-            <Dialog.Close className={styles.importClose} aria-label="Закрыть импорт"><X size={20} aria-hidden /></Dialog.Close>
+            <Dialog.Close className={styles.importClose} aria-label="Закрыть импорт"><Icon name="x-lg" size={20} /></Dialog.Close>
           </header>
           <div className={styles.importBody}>
             <div className={styles.fileRow}>
@@ -156,7 +156,7 @@ export function ImportDialog({ operatorToken, sseRevision, reconnecting }: {
             ) : null}
             {state.phase === "submitted" ? (
               <p role="status" className={styles.importFeedback} data-tone={stateAccepted ? "success" : undefined}>
-                {stateAccepted ? <CircleCheck size={19} aria-hidden /> : null}
+                {stateAccepted ? <Icon name="check-circle" size={19} /> : null}
                 {stateAccepted ? `Импорт завершён. Ревизия ${state.revision} принята.`
                   : reconnecting ? "Ждём обновление снимка после переподключения…"
                   : `Ждём обновление снимка до ревизии ${state.revision}…`}
@@ -182,7 +182,7 @@ function ImportErrors({ issues }: { issues: readonly ImportIssue[] }) {
   return (
     <section aria-label="Ошибки в файле">
       <div className={styles.importFeedback} data-tone="error" role="status">
-        <CircleAlert size={20} aria-hidden />
+        <Icon name="exclamation-circle" size={20} />
         <div>
           <h3>Ошибки в файле ({issues.length})</h3>
           <p>Исправьте указанные поля и выберите обновлённый файл.</p>
