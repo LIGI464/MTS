@@ -2,6 +2,24 @@
 
 Для стенда нужны Docker с Compose v2 и проверенный релизный SHA из T51. Команды ниже выполняются из корня репозитория. Fastify раздаёт Web по пути `/admin/incidents` и обслуживает REST и SSE на том же адресе.
 
+## Быстрый старт на пустом VPS
+
+На сервере с Docker и Git, **без локального клона**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LIGI464/MTS/cursor/assistant-logic-51a0/deploy/vps-bootstrap.sh | bash
+```
+
+Опционально перед запуском (или экспортом в той же сессии):
+
+```bash
+export MTS_HOST_DATA_DIR=/srv/mts/data
+export MTS_HOST_PORT=8787
+export MTS_REF=cursor/assistant-logic-51a0
+```
+
+Реальная выгрузка: положите её как `$MTS_HOST_DATA_DIR/import.json` **до** повторного запуска скрипта — он выполнит `npm run data:load`. Скрипт сам соберёт образ, поднимет compose, создаст `coordinators.json` при отсутствии и прогонит smoke.
+
 ## Конфигурация хоста
 
 Перейдите на релизный коммит и подготовьте закрытый env-файл вне репозитория.
