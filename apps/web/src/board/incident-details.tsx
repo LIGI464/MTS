@@ -3,9 +3,9 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { AnalysisPanel } from "../analysis";
-import { coordinatorQuery, detailQuery, type IncidentClient } from "../data/incidents";
+import { detailQuery, type IncidentClient } from "../data/incidents";
 import { Icon } from "../icons";
-import { CoordinatorForm } from "./coordinator-form";
+import { CoordinatorValue } from "./coordinator";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
 import { incidentCoordinator, PRIORITIES } from "./model";
@@ -37,27 +37,22 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, mode, nowMs, client, revision, sseRevision, operatorToken, runAnalysis, onClose, onReturnFocus }: {
+export function IncidentDetails({ id, incident, nowMs, client, revision, operatorToken, runAnalysis, onClose, onReturnFocus }: {
   id: string;
   incident: Incident | undefined;
-  mode: "detail" | "assignment";
   nowMs: number;
   client: IncidentClient;
   revision?: number;
-  sseRevision: number | null;
   operatorToken?: string;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
   onClose: () => void;
   onReturnFocus: () => void;
 }) {
   const detail = useQuery({ ...detailQuery(client, id, incident?.version, revision), refetchOnMount: "always" });
-  const directory = useQuery(coordinatorQuery(client));
   const record = detail.data;
   const known = record?.ticket ?? incident;
   const current = known ? incidentCoordinator(known) : null;
   const sla = incident ? presentSla(incident, nowMs) : null;
-  const title = mode === "assignment" ? (current ? "Сменить координатора" : "Назначить координатора")
-    : known?.title ?? "Инцидент";
 
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -68,22 +63,22 @@ export function IncidentDetails({ id, incident, mode, nowMs, client, revision, s
           <div className="detail-heading">
             <div>
               <Dialog.Description className="detail-id" data-numeric="tabular">{id}</Dialog.Description>
-              <Dialog.Title>{title}</Dialog.Title>
-              {mode === "assignment" && known ? <p className={styles.subtitle}>{known.title}</p> : null}
+              <Dialog.Title>{known?.title ?? "Инцидент"}</Dialog.Title>
             </div>
             <Dialog.Close className="detail-close" aria-label="Закрыть"><Icon name="x-lg" size={21} /></Dialog.Close>
           </div>
-          {mode === "detail" && sla ? (
+          {sla ? (
             <p className="detail-sla" data-tone={sla.tone} data-numeric="tabular" title={sla.hint}>
               <span>SLA</span><strong>{sla.status}</strong>{sla.duration ? <span>{sla.duration}</span> : null}
             </p>
           ) : null}
-          {mode === "detail" && known ? (
+          {known ? (
             <FieldList entries={[
               ["Приоритет", priorityLabel(known.priority)], ["Статус", known.stateLabel],
               ["Продукт", known.product], ["Сервис", known.service], ["Регистрация", formatMoscow(known.createdAt)],
               ["Срок SLA", known.dueAt && formatMoscow(known.dueAt)], ["Завершение", known.resolvedAt && formatMoscow(known.resolvedAt)],
-              ["Команда", known.team], ["Исполнитель", known.assignee], ["Координатор", current?.name ?? null],
+              ["Команда", known.team], ["Исполнитель", known.assignee],
+              ["Координатор", <CoordinatorValue coordinator={current} />],
             ]} />
           ) : null}
           {detail.isPending ? <p role="status">Загружаем полную запись…</p> : null}
@@ -93,24 +88,11 @@ export function IncidentDetails({ id, incident, mode, nowMs, client, revision, s
               <button type="button" className={styles.button} onClick={() => void detail.refetch()}>Повторить загрузку</button>
             </div>
           ) : null}
-          {directory.isError && record?.ticket.present ? (
-            <div className={styles.failure}>
-              <p role="alert">Не удалось загрузить справочник координаторов.</p>
-              <button type="button" className={styles.button} onClick={() => void directory.refetch()}>Загрузить справочник</button>
-            </div>
-          ) : null}
-          <CoordinatorForm id={id} detail={record} coordinators={directory.data} client={client}
-            operatorToken={operatorToken} sseRevision={sseRevision} busy={detail.isFetching}
-            reload={async () => (await detail.refetch()).isSuccess} />
-          {mode === "detail" ? (
-            <>
-              <a className="detail-itsm" href={itsmHref(incident ?? { id, itsmUrl: null })} target="_blank" rel="noopener noreferrer">
-                В ITSM <Icon name="box-arrow-up-right" />
-              </a>
-              {record ? <FullRecord detail={record} /> : null}
-              {incident ? <AnalysisPanel incident={incident} runAnalysis={runAnalysis} operatorToken={operatorToken} /> : null}
-            </>
-          ) : null}
+          <a className="detail-itsm" href={itsmHref(incident ?? { id, itsmUrl: null })} target="_blank" rel="noopener noreferrer">
+            В ITSM <Icon name="box-arrow-up-right" />
+          </a>
+          {record ? <FullRecord detail={record} /> : null}
+          {incident ? <AnalysisPanel incident={incident} runAnalysis={runAnalysis} operatorToken={operatorToken} /> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

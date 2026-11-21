@@ -1,8 +1,6 @@
-import { AssignCoordinatorSchema } from "@mts/contracts";
+import { COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
 import { expect, test, type Page } from "@playwright/test";
-import { DashboardRequestError } from "../../apps/web/src/data/api";
-import { createIncidentFixtures } from "../../apps/web/src/data/incident-fixtures";
-import { openService, OPERATOR_TOKEN, returnToBoard, startDashboard } from "./support/harness.js";
+import { readLive, startDashboard, writeLive } from "./support/harness.js";
 
 const ID = "INC000000000001";
 const card = (page: Page, id = ID) => page.locator(`[data-incident-id="${id}"]`);
@@ -57,7 +55,7 @@ test("D13 проверяет карточку, детали, события, к�
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
 
     await page.getByRole("button", { name: "Критический", exact: true }).click();
-    await page.getByRole("button", { name: "Назначение", exact: true }).click();
+    await page.getByRole("button", { name: "Имитировать обновление ITSM", exact: true }).click();
     const eventTrigger = page.getByRole("button", { name: "События, новых: 2" });
     await expect(eventTrigger).toBeVisible();
     await eventTrigger.focus();
@@ -94,81 +92,29 @@ test("D13 проверяет карточку, детали, события, к�
   }
 });
 
-test("D13 отправляет версию и UUID, восстанавливается после 409 и ждёт SSE перед обновлением", async ({ page }) => {
-  const app = await startDashboard();
+test("D13 открывает детали и обновляет координатора после новой выгрузки ITSM", async ({ page }) => {
+  const app = await startDashboard("rules", "", { coordinators: [{ id: "irina", name: "Ирина Волкова" }] });
   try {
-    const fixtures = createIncidentFixtures(Date.now());
-    let frame = fixtures.initial;
-    let allowEvents = true;
-    let conflict = true;
-    const client = fixtures.client((next) => { frame = next; });
-    const seenVersions: string[] = [];
-    const requestIds = new Set<string>();
-
-    await page.route("**/api/v1/**", async (route) => {
-      const request = route.request();
-      const path = new URL(request.url()).pathname;
-      if (path.endsWith("/dashboard")) return route.fulfill({ json: fixtures.initial });
-      if (path.endsWith("/events")) {
-        return route.fulfill({
-          headers: { "content-type": "text/event-stream" },
-          body: allowEvents ? `retry: 100\nevent: dashboard\ndata: ${JSON.stringify(frame)}\n\n` : "retry: 100\n\n",
-        });
-      }
-      if (path.endsWith("/coordinators")) return route.fulfill({ json: await client.coordinators() });
-      if (path.endsWith(`/${ID}`)) return route.fulfill({ json: await client.detail(ID) });
-      if (path.endsWith(`/${ID}/coordinator`)) {
-        const body = AssignCoordinatorSchema.parse(request.postDataJSON());
-        expect(request.headers().authorization).toBe(`Bearer ${OPERATOR_TOKEN}`);
-        seenVersions.push(body.expectedVersion);
-        requestIds.add(body.requestId);
-        if (conflict) {
-          conflict = false;
-          await client.assign(ID, { ...body, coordinatorId: "anna", requestId: crypto.randomUUID() });
-        }
-        try {
-          return route.fulfill({ json: await client.assign(ID, body) });
-        } catch (error) {
-          if (!(error instanceof DashboardRequestError)) throw error;
-          return route.fulfill({ status: error.status, json: { code: error.code, message: error.message } });
-        }
-      }
-      return route.continue();
-    });
     await page.goto(`${app.url}/admin/incidents`);
-    await expect(count(page)).toHaveCount(24);
-    allowEvents = false;
-    await (await openService(page)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
-    await returnToBoard(page);
+    await expect(page.getByText("Данные актуальны", { exact: true })).toBeVisible();
+    const incident = card(page);
+    await expect(incident.getByText("Координатор не указан в ITSM", { exact: true })).toBeVisible();
+    const opener = incident.getByRole("button", { name: "Подробнее" });
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Задержка обновления статусов заказов" });
+    await expect(dialog.getByText("Координатор не указан в ITSM", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "В ITSM" })).toHaveAttribute("href", `/itsm/incidents/${ID}`);
 
-    const assign = card(page).getByRole("button", { name: "Назначить координатора" });
-    await assign.click();
-    const dialog = page.getByRole("dialog");
-    const chooser = dialog.getByRole("combobox", { name: "Координатор для назначения", exact: true });
-    await chooser.selectOption("irina");
-    await dialog.getByRole("button", { name: "Сохранить" }).click();
-    await expect(dialog.getByRole("alert")).toContainText("Карточка изменилась");
-    await dialog.getByRole("button", { name: "Перечитать карточку" }).click();
-    await expect(chooser).toHaveValue("irina");
-    await expect(chooser.locator("option").first()).toHaveText("Сейчас · Анна Кузнецова");
-    await dialog.getByRole("button", { name: "Сохранить" }).click();
-    await expect(dialog.getByText("Ожидаем обновление от сервера…")).toBeVisible();
-    await expect(card(page).getByText("Координатор не назначен")).toHaveCount(1);
-    allowEvents = true;
-    await expect(dialog.getByText("Координатор обновлён")).toBeVisible();
-    await expect(chooser.locator("option").first()).toHaveText("Сейчас · Ирина Волкова");
+    const rows: RawIncidentFields[] = JSON.parse(await readLive(app.dataDir));
+    await writeLive(app.dataDir, JSON.stringify(rows.map((row) => row.id === ID
+      ? { ...row, assignedGroupName: COORDINATOR_TEAM, assignedEmployee: "  Ирина Волкова  " }
+      : row)));
+    await expect(dialog.locator("dd").filter({ hasText: "ITSM" })).toHaveText("Ирина Волкова ITSM");
+    await expect(dialog.getByRole("button", { name: /назначить|сменить координатора/i })).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await expect(card(page).getByText("Координатор · Ирина Волкова")).toBeVisible();
-
-    await card(page).getByRole("button", { name: "Подробнее" }).click();
-    await dialog.getByRole("combobox", { name: "Координатор для назначения", exact: true }).selectOption("maksim");
-    await dialog.getByRole("button", { name: "Сохранить" }).click();
-    await expect(dialog.getByText("Координатор обновлён")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(card(page).getByText("Координатор · Максим Орлов")).toBeVisible();
-    expect(seenVersions).toHaveLength(3);
-    expect(new Set(seenVersions).size).toBe(3);
-    expect(requestIds.size).toBe(3);
+    await expect(opener).toBeFocused();
+    await expect(incident.locator("p").filter({ hasText: "Координатор ·" })).toHaveText("Координатор · Ирина Волкова ITSM");
   } finally {
     await app.stop();
   }

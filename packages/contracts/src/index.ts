@@ -1,6 +1,4 @@
 export {
-  AssignCoordinatorResultSchema,
-  AssignCoordinatorSchema,
   CoordinatorListSchema,
   CoordinatorSchema,
   FullTicketDetailSchema,
@@ -10,8 +8,6 @@ export {
   ImportPreviewResultSchema,
 } from "./incident-workflow.js";
 export type {
-  AssignCoordinator,
-  AssignCoordinatorResult,
   Coordinator,
   CoordinatorList,
   FullTicketDetail,

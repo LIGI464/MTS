@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { IncidentSchema, NoticeSchema, type Coordinator, type Incident, type MutationResult, type Notice } from "@mts/contracts";
+import { IncidentSchema, NoticeSchema, type Incident, type MutationResult, type Notice } from "@mts/contracts";
+import { createCoordinatorProjection } from "../source/coordinators.js";
 import type { SourceRecord } from "../source/input.js";
 import { prepareImportJournal } from "./imports.js";
 import { prepareItsmArchive } from "./itsm.js";
@@ -15,12 +16,11 @@ export type StoredDashboard = {
 
 type PendingNotice = Omit<Notice, "seq">;
 type DashboardState = Omit<StoredDashboard, "notices"> & { records: readonly SourceRecord[] };
-export type DashboardMutation = PendingMutation & { coordinator?: Coordinator };
 type SaveOptions = {
   dashboardChanged?: boolean;
   refreshSource?: boolean;
   reset?: boolean;
-  mutation?: DashboardMutation;
+  mutation?: PendingMutation;
   importRequestId?: string;
 };
 type SaveResult = Pick<StoredDashboard, "revision" | "notices"> & { mutation?: MutationResult };
@@ -32,8 +32,7 @@ export type DashboardStore = {
   getTicket: ReturnType<typeof prepareItsmArchive>["getTicket"];
   getTicketVersion: ReturnType<typeof prepareItsmArchive>["getVersion"];
   getPresentFingerprints: ReturnType<typeof prepareItsmArchive>["getPresentFingerprints"];
-  listPresentRaw: ReturnType<typeof prepareItsmArchive>["listPresentRaw"];
-  getCoordinatorAssignments: ReturnType<typeof prepareItsmArchive>["getCoordinatorAssignments"];
+  getPresentRaw: ReturnType<typeof prepareItsmArchive>["getPresentRaw"];
   mutations: Omit<ReturnType<typeof prepareMutationJournal>, "finish">;
   imports: Omit<ReturnType<typeof prepareImportJournal>, "finish">;
   close(): void;
@@ -44,7 +43,7 @@ function isDescriptionEntry(value: unknown): value is [string, string | null] {
     && (typeof value[1] === "string" || value[1] === null);
 }
 
-export function openDashboardStore(path: string): DashboardStore {
+export function openDashboardStore(path: string, projectCoordinator = createCoordinatorProjection([])): DashboardStore {
   const database = new DatabaseSync(path);
   try {
     database.exec(`
@@ -63,7 +62,7 @@ export function openDashboardStore(path: string): DashboardStore {
         at TEXT NOT NULL
       ) STRICT;
     `);
-    const archive = prepareItsmArchive(database);
+    const archive = prepareItsmArchive(database, projectCoordinator);
     const mutations = prepareMutationJournal(database);
     const imports = prepareImportJournal(database);
     const dashboard = database.prepare(`
@@ -120,10 +119,13 @@ export function openDashboardStore(path: string): DashboardStore {
           if (!Array.isArray(entries) || !entries.every(isDescriptionEntry)) {
             throw new Error("Некорректные описания инцидентов в SQLite");
           }
+          const raw = archive.getPresentRaw();
           return {
             revision,
             lastGoodAt,
-            incidents: incidentList.parse(JSON.parse(incidents)),
+            incidents: incidentList.parse(JSON.parse(incidents)).map((incident) => ({
+              ...incident, coordinator: projectCoordinator(raw.get(incident.id)),
+            })),
             descriptions: entries,
             notices: noticeList.parse(readNotices.all()),
           };
@@ -132,11 +134,6 @@ export function openDashboardStore(path: string): DashboardStore {
       save(state, events, { dashboardChanged, refreshSource, reset, mutation, importRequestId }) {
         return transaction("BEGIN IMMEDIATE", () => {
           const { lastGoodAt, incidents, descriptions, records } = state;
-          if (mutation?.coordinator) {
-            // This mutation has only SQLite writes, so the receipt can be committed in the same transaction.
-            mutations.begin(mutation);
-            archive.assignCoordinator(mutation.id, mutation.coordinator);
-          }
           const archiveChanged = archive.sync(records, lastGoodAt);
           const changed = Boolean(dashboardChanged || archiveChanged || reset);
           if (!changed && !refreshSource && !mutation && !importRequestId) return null;
@@ -169,8 +166,7 @@ export function openDashboardStore(path: string): DashboardStore {
       getTicket: archive.getTicket,
       getTicketVersion: archive.getVersion,
       getPresentFingerprints: archive.getPresentFingerprints,
-      listPresentRaw: archive.listPresentRaw,
-      getCoordinatorAssignments: archive.getCoordinatorAssignments,
+      getPresentRaw: archive.getPresentRaw,
       mutations,
       imports,
       close() {

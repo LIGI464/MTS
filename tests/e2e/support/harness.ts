@@ -107,7 +107,7 @@ export async function startDashboard(
   };
 }
 
-export function applyDemoStep(dataDir: string, step: "critical" | "assign" | "deadline" | "resolve"): void {
+export function applyDemoStep(dataDir: string, step: "critical" | "deadline" | "resolve"): void {
   const result = spawnSync(process.execPath, [STEP_JS, step], {
     cwd: REPO_ROOT,
     env: { ...process.env, MTS_DATA_DIR: dataDir },

@@ -1,5 +1,6 @@
 import type { Incident } from "@mts/contracts";
 import { Icon, type IconName } from "../icons";
+import { CoordinatorValue } from "./coordinator";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
 import { displayText, incidentCoordinator, PRIORITIES, priorityQueues } from "./model";
@@ -18,13 +19,11 @@ export function IncidentBoard({
   nowMs,
   highlight,
   onInspect,
-  onAssign,
 }: {
   incidents: readonly Incident[];
   nowMs: number;
   highlight?: IncidentAlert | null;
   onInspect: (id: string) => void;
-  onAssign: (id: string) => void;
 }) {
   const queues = priorityQueues(incidents);
   return (
@@ -43,7 +42,7 @@ export function IncidentBoard({
               {cards.map((incident) => (
                 <IncidentCard key={incident.id} incident={incident} priorityLabel={label} nowMs={nowMs}
                   newSequence={highlight?.incidentIds.has(incident.id) ? highlight.sequence : undefined}
-                  onInspect={onInspect} onAssign={onAssign} />
+                  onInspect={onInspect} />
               ))}
             </div>
           </section>
@@ -59,14 +58,12 @@ function IncidentCard({
   nowMs,
   newSequence,
   onInspect,
-  onAssign,
 }: {
   incident: Incident;
   priorityLabel: string;
   nowMs: number;
   newSequence?: number;
   onInspect: (id: string) => void;
-  onAssign: (id: string) => void;
 }) {
   const coordinator = incidentCoordinator(incident);
   const sla = presentSla(incident, nowMs);
@@ -97,7 +94,7 @@ function IncidentCard({
         <p>{displayText(incident.assignee, incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
         <p>{displayText(incident.team, "Группа не назначена")}</p>
         <p className={styles.coordinator}>
-          {coordinator ? `Координатор · ${coordinator.name}` : "Координатор не назначен"}
+          {coordinator ? <>Координатор{" · "}</> : null}<CoordinatorValue coordinator={coordinator} />
         </p>
       </div>
       <div className={styles.cardFooter}>
@@ -107,9 +104,6 @@ function IncidentCard({
           {sla.duration ? <span>{sla.duration}</span> : null}
         </p>
         <div className={styles.actions}>
-          <button type="button" className={`${styles.action} ${styles.assignment}`} onClick={() => onAssign(incident.id)}>
-            {coordinator ? "Сменить координатора" : "Назначить координатора"}
-          </button>
           <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
             В ITSM <Icon name="box-arrow-up-right" size={14} />
           </a>

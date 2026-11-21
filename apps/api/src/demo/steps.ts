@@ -6,12 +6,11 @@ import {
 } from "@mts/contracts";
 import { incidentState, readIncidentBytes } from "../source/input.js";
 
-export const DEMO_STEPS = ["critical", "assign", "deadline", "resolve"] as const;
+export const DEMO_STEPS = ["critical", "deadline", "resolve"] as const;
 export type DemoStep = (typeof DEMO_STEPS)[number];
 
 const NO_TARGET: Record<DemoStep, string> = {
   critical: "Нет активного инцидента высокого приоритета вне группы координаторов.",
-  assign: "Нет активного критического инцидента для назначения.",
   deadline: "Нет другого активного инцидента с приоритетом от 1 до 3.",
   resolve: "Нет активного критического инцидента для завершения.",
 };
@@ -39,7 +38,6 @@ export function applyDemoStep(bytes: Uint8Array, step: DemoStep, nowMs = Date.no
     case "critical":
       target = active.find(({ record }) => record.priorityId === 3 && record.assignedGroupName !== COORDINATOR_TEAM);
       break;
-    case "assign":
     case "resolve":
       target = active.find(({ record }) => record.priorityId === 4);
       break;
@@ -55,9 +53,6 @@ export function applyDemoStep(bytes: Uint8Array, step: DemoStep, nowMs = Date.no
   switch (step) {
     case "critical":
       markExportAsCritical(raw);
-      break;
-    case "assign":
-      raw.assignedGroupName = COORDINATOR_TEAM;
       break;
     case "deadline":
       raw.deadline = new Date(nowMs + 90_000).toISOString();

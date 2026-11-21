@@ -1,7 +1,6 @@
 export const ACTION_ORDER = [
   "create-critical",
   "escalate",
-  "assign",
   "deadline",
   "resolve",
 ] as const;
@@ -11,7 +10,6 @@ export type DeveloperAction = (typeof ACTION_ORDER)[number];
 export const ACTION_LABELS: Record<DeveloperAction, string> = {
   "create-critical": "Добавить критический",
   escalate: "Повысить приоритет",
-  assign: "Назначить координаторам",
   deadline: "Изменить срок",
   resolve: "Записать решение",
 };

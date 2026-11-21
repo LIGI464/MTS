@@ -4,10 +4,10 @@ export const registryPath = "/itsm/incidents";
 export const ticketPath = (id: string) => `${registryPath}/${encodeURIComponent(id)}`;
 
 const summary = IncidentSchema.pick({
-  id: true, version: true, title: true, product: true, service: true, team: true, assignee: true,
+  id: true, version: true, title: true, product: true, service: true, team: true, assignee: true, coordinator: true,
   state: true, stateLabel: true, priority: true, createdAt: true, dueAt: true, resolvedAt: true,
 }).loose();
-const historyFields = summary.pick({ version: true, stateLabel: true, team: true, dueAt: true, priority: true });
+const historyFields = summary.pick({ version: true, stateLabel: true, team: true, coordinator: true, dueAt: true, priority: true });
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

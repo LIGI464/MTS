@@ -8,14 +8,17 @@ import { normalizeIncidents } from "../src/source/input.js";
 import { openDashboardStore, type DashboardStore } from "../src/store/index.js";
 
 const at = "2025-01-01T00:00:00.000Z";
-const { records, ...dashboard } = normalizeIncidents(Buffer.from(JSON.stringify([{
+const { records, descriptions } = normalizeIncidents(Buffer.from(JSON.stringify([{
   id: "SYN-STORE-01", submitDate: at, priorityId: 4, description: "Описание для анализа",
 }])));
-const state = { ...dashboard, revision: 0, lastGoodAt: at };
+const state = {
+  incidents: records.map(({ incident }) => ({ ...incident, coordinator: null })),
+  descriptions, revision: 0, lastGoodAt: at,
+};
 const event: Omit<Notice, "seq"> = {
   kind: "critical.new",
-  incidentId: dashboard.incidents[0].id,
-  title: dashboard.incidents[0].title,
+  incidentId: state.incidents[0].id,
+  title: state.incidents[0].title,
   at,
 };
 const reset: Omit<Notice, "seq"> = { kind: "demo.reset", incidentId: null, title: null, at };

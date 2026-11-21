@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AssignCoordinatorResult, FullTicketDetail, TicketSummary } from "./incident-workflow.js";
+import type { FullTicketDetail, TicketSummary } from "./incident-workflow.js";
 
 export type { HistoryEntry, TicketSummary } from "./incident-workflow.js";
 
@@ -13,7 +13,6 @@ const target = { requestId, id: z.string().min(1), expectedVersion: z.string().m
 export const ScenarioCommandSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-critical"), requestId }),
   z.strictObject({ action: z.literal("escalate"), ...target }),
-  z.strictObject({ action: z.literal("assign"), ...target }),
   z.strictObject({ action: z.literal("deadline"), ...target, deadline: z.iso.datetime() }),
 ]);
 
@@ -28,4 +27,4 @@ export const ResolveIncidentSchema = z.strictObject({
 
 export type ScenarioCommand = z.infer<typeof ScenarioCommandSchema>;
 export type ResolveIncident = z.infer<typeof ResolveIncidentSchema>;
-export type MutationResult = AssignCoordinatorResult;
+export type MutationResult = { id: string; version: string; revision: number };

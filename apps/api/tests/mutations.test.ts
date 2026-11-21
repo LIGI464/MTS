@@ -110,7 +110,7 @@ describe("D21 mutations (SYN-D21)", () => {
       { action: "create-critical", requestId: "not-a-uuid" },
       { action: "create-critical", requestId: requestId(1), id: primary.id },
       { action: "critical", requestId: requestId(1) },
-      { action: "assign", id: primary.id, requestId: requestId(1) },
+      { action: "assign", id: primary.id, expectedVersion: version, requestId: requestId(1) },
       { action: "deadline", id: primary.id, expectedVersion: version, requestId: requestId(1), deadline: "2032-02-30T12:00:00Z" },
       { action: "deadline", id: primary.id, expectedVersion: version, requestId: requestId(1), deadline: "2032-06-03T12:00:00" },
     ];
@@ -167,14 +167,11 @@ describe("D21 mutations (SYN-D21)", () => {
     expect((await ticket(result.id)).history.map(({ present }) => present)).toEqual([false, true]);
   });
 
-  it("applies all targeted actions, preserving the raw export and original solution history", async () => {
+  it("applies targeted actions around an ITSM export update and preserves the solution history", async () => {
     await start();
     let version = (await ticket()).ticket.version;
     const steps = [
       { action: "escalate", changes: { priorityId: 4, priority: "Наивысший" } },
-      { action: "assign", changes: {
-        assignedGroupName: COORDINATOR_TEAM, assignedEmployee: null, lastAssignmentToTeamDateTime: now,
-      } },
       { action: "deadline", deadline: due, changes: { deadline: due } },
     ];
     let expected = { ...primary };
@@ -189,6 +186,10 @@ describe("D21 mutations (SYN-D21)", () => {
       expected = { ...expected, ...changes } as typeof primary;
       expect(await rawRows()).toEqual([secondary, expected, finished]);
     }
+    expected = { ...expected, assignedGroupName: COORDINATOR_TEAM, assignedEmployee: "Синтетический координатор" };
+    await files.atomicWrite(live, encode([secondary, expected, finished]));
+    await expect.poll(async () => (await ticket()).ticket.coordinator?.name).toBe(expected.assignedEmployee);
+    version = (await ticket()).ticket.version;
     expect((await snapshot()).groups).toMatchObject({ critical: [primary.id], coordinator: [primary.id], high: [secondary.id] });
 
     const complete = await resolve(primary.id, version, "  Очередь восстановлена. 🧪  ", 4);
@@ -225,7 +226,7 @@ describe("D21 mutations (SYN-D21)", () => {
     const second = (await ticket(secondary.id)).ticket;
     const commands = [
       { action: "escalate", id: first.id, expectedVersion: first.version, requestId: requestId(1) },
-      { action: "assign", id: first.id, expectedVersion: first.version, requestId: requestId(2) },
+      { action: "deadline", id: first.id, expectedVersion: first.version, deadline: due, requestId: requestId(2) },
       { action: "deadline", id: second.id, expectedVersion: second.version, deadline: due, requestId: requestId(3) },
     ];
     const [left, right, independent] = await Promise.all(commands.map((command) => post(scenarios, command)));

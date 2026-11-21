@@ -92,13 +92,13 @@ describe("D20 synthetic archive (SYN-D20)", () => {
     expect(await list()).toEqual({ items: [detail.ticket, empty.ticket, (await ticket(longId)).ticket] });
     expect(detail.ticket).toEqual({
       id: primary.id, version: expect.any(String), title: primary.header, product: null, service: null,
-      team: null, assignee: null, state: "Assigned", stateLabel: "Назначен", priority: 3,
+      team: null, assignee: null, coordinator: null, state: "Assigned", stateLabel: "Назначен", priority: 3,
       createdAt: "2026-11-20T10:00:00.000Z", dueAt: null, resolvedAt: null, present: true, hasSolution: true,
     });
     expect(detail).toMatchObject({ description: primary.description, solution: primary.solution });
     expect(detail.history).toEqual([{
       version: detail.ticket.version, at: observedAt(0), present: true, stateLabel: "Назначен",
-      team: null, dueAt: null, priority: 3, description: primary.description, solution: primary.solution,
+      team: null, coordinator: null, dueAt: null, priority: 3, description: primary.description, solution: primary.solution,
     }]);
     expect(empty).toMatchObject({ ticket: { present: true, hasSolution: false }, description: null, solution: null });
     expect(await ticket()).toEqual(detail);

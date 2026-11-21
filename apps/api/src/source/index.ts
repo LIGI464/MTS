@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { CoordinatorList, ImportApplyRequest, ImportApplyResult, MutationResult, Notice, Snapshot } from "@mts/contracts";
 import { buildGroups, diffNotices } from "../domain/index.js";
-import { MutationError, planMutation, requireTicketVersion, type ItsmCommand } from "../itsm/mutation.js";
+import { MutationError, planMutation, type ItsmCommand } from "../itsm/mutation.js";
 import type { DashboardRuntime, DashboardRuntimeOptions } from "../runtime-contract.js";
-import { openDashboardStore, type DashboardMutation } from "../store/index.js";
-import { inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory } from "./coordinators.js";
+import { openDashboardStore } from "../store/index.js";
+import type { PendingMutation } from "../store/mutations.js";
+import { createCoordinatorProjection, inferCoordinatorDirectory, projectCoordinators, readCoordinatorDirectory } from "./coordinators.js";
 import { atomicWrite, isMissingFile } from "./file.js";
 import { createImportPreviews } from "./import.js";
 import { InvalidIncidentFile, LIVE_FILENAME, fingerprint, normalizeIncidents, sha256, type NormalizedIncidents } from "./input.js";
@@ -25,7 +26,8 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   await mkdir(options.dataDir, { recursive: true });
   const configuredDirectory = await readCoordinatorDirectory(options.dataDir);
   const livePath = join(options.dataDir, LIVE_FILENAME);
-  const store = openDashboardStore(join(options.dataDir, "dashboard.sqlite"));
+  const projectCoordinator = createCoordinatorProjection(configuredDirectory ?? []);
+  const store = openDashboardStore(join(options.dataDir, "dashboard.sqlite"), projectCoordinator);
   const listeners = new Set<(snapshot: Snapshot) => void>();
   const importPreviews = createImportPreviews();
 
@@ -33,7 +35,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   let coordinators: CoordinatorList;
   try {
     persisted = store.load();
-    coordinators = configuredDirectory ?? inferCoordinatorDirectory(store.listPresentRaw());
+    coordinators = configuredDirectory ?? inferCoordinatorDirectory(store.getPresentRaw().values());
   } catch (error) {
     store.close();
     throw error;
@@ -83,12 +85,10 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
   function accept(
     source: NormalizedIncidents,
     digest: string,
-    { reset = false, mutation, importRequestId }: { reset?: boolean; mutation?: DashboardMutation; importRequestId?: string } = {},
+    { reset = false, mutation, importRequestId }: { reset?: boolean; mutation?: PendingMutation; importRequestId?: string } = {},
   ) {
     const directory = configuredDirectory ?? inferCoordinatorDirectory(source.records.map(({ raw }) => raw));
-    const assignments = store.getCoordinatorAssignments();
-    if (mutation?.coordinator) assignments.set(mutation.id, mutation.coordinator);
-    const data = projectCoordinators(source, directory, assignments);
+    const data = projectCoordinators(source, projectCoordinator);
     const dashboardChanged = snapshot.source.lastGoodAt === null
       || data.incidents.length !== snapshot.incidents.length
       || data.incidents.some((incident, index) => incident.version !== snapshot.incidents[index].version);
@@ -210,7 +210,7 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     data: NormalizedIncidents,
     digest: string,
     previous: LiveFile,
-    operation: { mutation: DashboardMutation } | { importRequestId: string },
+    operation: { mutation: PendingMutation } | { importRequestId: string },
   ) {
     const discard = "mutation" in operation
       ? () => store.mutations.discard(operation.mutation.requestId)
@@ -255,20 +255,6 @@ export async function createDashboardRuntime(options: DashboardRuntimeOptions): 
     pendingDigest = undefined;
     const recovered = completedMutation(requestId, commandFingerprint);
     if (recovered) return recovered;
-
-    if (command.action === "set-coordinator") {
-      requireTicketVersion(command, store.getTicketVersion);
-      const coordinator = coordinators.find(({ id }) => id === command.coordinatorId);
-      if (!coordinator) throw new MutationError(404, "COORDINATOR_NOT_FOUND", "Координатор недоступен в справочнике.");
-      const target = current.data.records.find(({ incident }) => incident.id === command.id);
-      if (!target) throw new Error("Заявка отсутствует в принятом снимке.");
-      await requireSourceDigest(current.digest);
-      const result = accept(current.data, current.digest, { mutation: {
-        requestId, fingerprint: commandFingerprint, id: command.id, targetFingerprint: target.fingerprint, coordinator,
-      } })?.mutation;
-      if (!result) throw new Error("Результат операции отсутствует.");
-      return result;
-    }
 
     const { id, rows } = planMutation(command, current.data.records, store.getTicketVersion, now());
     const updated = Buffer.from(`${JSON.stringify(rows, null, 2)}\n`);

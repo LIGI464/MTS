@@ -7,7 +7,7 @@ import {
   type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFrameState } from "./apply";
 import { fetchDashboard, requestAnalysis, requestReset } from "./api";
 import { createIncidentFixtures } from "./incident-fixtures";
@@ -55,8 +55,7 @@ export function useDashboard(): {
     if (!mockMode) setConnection("live");
   }, [mockMode]);
 
-  const incidentClient = useMemo(() => boot.fixtures?.client((incoming) => accept(incoming, "sse")) ?? incidentApi,
-    [boot.fixtures, accept]);
+  const incidentClient = boot.fixtures?.client ?? incidentApi;
 
   const query = useQuery({
     queryKey: ["dashboard"],

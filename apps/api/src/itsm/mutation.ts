@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
-  COORDINATOR_TEAM, PRIORITY_LABELS, STATE_LABELS, isActiveState, markExportAsCritical,
-  type AssignCoordinator, type ResolveIncident, type ScenarioCommand,
+  PRIORITY_LABELS, STATE_LABELS, isActiveState, markExportAsCritical,
+  type ResolveIncident, type ScenarioCommand,
 } from "@mts/contracts";
 import { resolvedFields } from "../demo/steps.js";
 import type { SourceRecord } from "../source/input.js";
 
-type SourceCommand = ScenarioCommand | (ResolveIncident & { action: "resolve"; id: string });
-export type ItsmCommand = SourceCommand | (AssignCoordinator & { action: "set-coordinator"; id: string });
+export type ItsmCommand = ScenarioCommand | (ResolveIncident & { action: "resolve"; id: string });
 type GetVersion = (id: string) => { version: string; present: boolean } | null;
 
 export class MutationError extends Error {
@@ -16,7 +15,7 @@ export class MutationError extends Error {
   }
 }
 
-export function requireTicketVersion({ id, expectedVersion }: { id: string; expectedVersion: string }, getVersion: GetVersion): void {
+function requireTicketVersion({ id, expectedVersion }: { id: string; expectedVersion: string }, getVersion: GetVersion): void {
   const current = getVersion(id);
   if (!current) throw new MutationError(404, "NOT_FOUND", "Заявка не найдена.");
   if (!current.present) throw new MutationError(409, "TICKET_ARCHIVED", "Заявка в архиве.");
@@ -26,7 +25,7 @@ export function requireTicketVersion({ id, expectedVersion }: { id: string; expe
 }
 
 export function planMutation(
-  command: SourceCommand,
+  command: ItsmCommand,
   records: readonly SourceRecord[],
   getVersion: GetVersion,
   now: string,
@@ -66,19 +65,14 @@ export function planMutation(
     case "escalate":
       markExportAsCritical(raw);
       break;
-    case "assign":
-      if (records[index].incident.team !== COORDINATOR_TEAM) {
-        raw.assignedGroupName = COORDINATOR_TEAM;
-        raw.assignedEmployee = null;
-        raw.lastAssignmentToTeamDateTime = now;
-      }
-      break;
     case "deadline":
       raw.deadline = new Date(command.deadline).toISOString();
       break;
     case "resolve":
       Object.assign(raw, resolvedFields(now), { solution: command.solution.trim() });
       break;
+    default:
+      throw new MutationError(404, "NOT_FOUND", "Сценарий не найден.");
   }
   rows[index] = raw;
   return { id, rows };

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { Coordinator, FullTicketDetail, HistoryEntry, RawIncidentFields, TicketList, TicketSummary } from "@mts/contracts";
+import type { FullTicketDetail, HistoryEntry, RawIncidentFields, TicketList, TicketSummary } from "@mts/contracts";
+import type { CoordinatorProjection } from "../source/coordinators.js";
 import type { SourceRecord } from "../source/input.js";
 
 type StoredTicket = Omit<TicketSummary, "version" | "present">;
@@ -33,7 +34,7 @@ function readSummary(row: SummaryRow): TicketSummary {
   return { ...ticket, version: row.version, present: row.present === 1 };
 }
 
-export function prepareItsmArchive(database: DatabaseSync) {
+export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: CoordinatorProjection) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS itsm_history (
       seq INTEGER PRIMARY KEY,
@@ -50,15 +51,10 @@ export function prepareItsmArchive(database: DatabaseSync) {
       id TEXT PRIMARY KEY,
       latest_seq INTEGER NOT NULL REFERENCES itsm_history (seq)
     ) STRICT;
-    CREATE TABLE IF NOT EXISTS itsm_coordinator_assignments (
-      incident_id TEXT PRIMARY KEY REFERENCES itsm_incidents (id),
-      coordinator_id TEXT NOT NULL,
-      name TEXT NOT NULL
-    ) STRICT;
   `);
 
   const currentRows = database.prepare(`
-    SELECT h.version, h.present, h.ticket FROM itsm_incidents i
+    SELECT h.version, h.present, h.ticket, h.raw FROM itsm_incidents i
     JOIN itsm_history h ON h.seq = i.latest_seq ORDER BY i.id
   `);
   const presentRows = database.prepare(`
@@ -84,14 +80,6 @@ export function prepareItsmArchive(database: DatabaseSync) {
     INSERT INTO itsm_incidents (id, latest_seq) VALUES (?, ?)
     ON CONFLICT (id) DO UPDATE SET latest_seq = excluded.latest_seq
   `);
-  const readAssignments = database.prepare(`
-    SELECT incident_id AS incidentId, coordinator_id AS id, name FROM itsm_coordinator_assignments
-  `);
-  const assign = database.prepare(`
-    INSERT INTO itsm_coordinator_assignments (incident_id, coordinator_id, name) VALUES (?, ?, ?)
-    ON CONFLICT (incident_id) DO UPDATE SET coordinator_id = excluded.coordinator_id, name = excluded.name
-  `);
-
   type RecordData = Pick<HistoryRow, "incidentId" | "fingerprint" | "raw" | "ticket">;
 
   function append(record: RecordData, at: string, present: 0 | 1): void {
@@ -105,15 +93,8 @@ export function prepareItsmArchive(database: DatabaseSync) {
       const rows = presentFingerprints.all() as { id: string; fingerprint: string }[];
       return new Map(rows.map(({ id, fingerprint }) => [id, fingerprint]));
     },
-    listPresentRaw(): RawIncidentFields[] {
-      return (presentRows.all() as RecordData[]).map(({ raw }) => JSON.parse(raw) as RawIncidentFields);
-    },
-    getCoordinatorAssignments(): Map<string, Coordinator> {
-      const rows = readAssignments.all() as (Coordinator & { incidentId: string })[];
-      return new Map(rows.map(({ incidentId, ...coordinator }) => [incidentId, coordinator]));
-    },
-    assignCoordinator(id: string, coordinator: Coordinator): void {
-      assign.run(id, coordinator.id, coordinator.name);
+    getPresentRaw(): Map<string, RawIncidentFields> {
+      return new Map((presentRows.all() as RecordData[]).map(({ incidentId, raw }) => [incidentId, JSON.parse(raw) as RawIncidentFields]));
     },
     // Called within the same write transaction as the dashboard snapshot.
     sync(records: readonly SourceRecord[], at: string): boolean {
@@ -123,13 +104,13 @@ export function prepareItsmArchive(database: DatabaseSync) {
         const incidentId = record.incident.id;
         const prior = previous.get(incidentId);
         previous.delete(incidentId);
-        const ticket = JSON.stringify(projectTicket(record));
-        if (prior?.fingerprint === record.fingerprint && prior.ticket === ticket) continue;
+        // A projection correction must keep the version of the same accepted source record.
+        if (prior?.fingerprint === record.fingerprint) continue;
         append({
           incidentId,
           fingerprint: record.fingerprint,
           raw: JSON.stringify(record.raw),
-          ticket,
+          ticket: JSON.stringify(projectTicket(record)),
         }, at, 1);
         changed = true;
       }
@@ -137,7 +118,9 @@ export function prepareItsmArchive(database: DatabaseSync) {
       return changed || previous.size > 0;
     },
     listTickets(): TicketList {
-      return { items: (currentRows.all() as SummaryRow[]).map(readSummary) };
+      return { items: (currentRows.all() as (SummaryRow & Pick<HistoryRow, "raw">)[]).map((row) => ({
+        ...readSummary(row), coordinator: projectCoordinator(JSON.parse(row.raw) as RawIncidentFields),
+      })) };
     },
     getVersion(id: string): { version: string; present: boolean } | null {
       const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;
@@ -162,7 +145,7 @@ export function prepareItsmArchive(database: DatabaseSync) {
         const { version, present, stateLabel, team, coordinator, dueAt, priority } = ticket;
         return { version, at, present, stateLabel, team, coordinator, dueAt, priority, description, solution };
       });
-      return { ticket, description, solution, history, rawFields };
+      return { ticket: { ...ticket, coordinator: projectCoordinator(rawFields) }, description, solution, history, rawFields };
     },
   };
 }

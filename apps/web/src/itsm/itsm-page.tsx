@@ -1,6 +1,7 @@
 import { PRIORITY_LABELS, isActiveState, type HistoryEntry, type TicketDetail, type TicketSummary } from "@mts/contracts";
 import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
+import { CoordinatorValue } from "../board/coordinator";
 import { formatMoscow } from "../board/format";
 import { Icon } from "../icons";
 import { fetchRegistry, fetchTicket, ItsmRequestError, registryPath, ticketPath } from "./api";
@@ -168,6 +169,7 @@ function TicketPage({ id, revision, operatorToken, onLocalToken }: {
                 <div><dt>Сервис</dt><dd>{detail.ticket.service ?? "Не указан"}</dd></div>
                 <div><dt>Команда</dt><dd>{detail.ticket.team ?? "Группа не назначена"}</dd></div>
                 <div><dt>Исполнитель</dt><dd>{detail.ticket.assignee ?? "Исполнитель не назначен"}</dd></div>
+                <div><dt>Координатор</dt><dd><CoordinatorValue coordinator={detail.ticket.coordinator ?? null} /></dd></div>
                 <div><dt>Приоритет</dt><dd>{PRIORITY_LABELS[detail.ticket.priority]} · {detail.ticket.priority}</dd></div>
                 <div><dt>Регистрация (МСК)</dt><dd><MoscowTime value={detail.ticket.createdAt} /></dd></div>
                 <div><dt>Срок (МСК)</dt><dd><MoscowTime value={detail.ticket.dueAt} fallback="Срок не задан" /></dd></div>

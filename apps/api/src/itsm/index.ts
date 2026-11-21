@@ -1,4 +1,4 @@
-import { API_PREFIX, AssignCoordinatorSchema, ResolveIncidentSchema, ScenarioCommandSchema, type ApiError } from "@mts/contracts";
+import { API_PREFIX, ResolveIncidentSchema, ScenarioCommandSchema, type ApiError } from "@mts/contracts";
 import type { FastifyInstance } from "fastify";
 import { requireOperator } from "../http/operator-token.js";
 import type { RouteContext } from "../runtime-contract.js";
@@ -35,11 +35,5 @@ export function registerItsmRoutes(app: FastifyInstance, { runtime, operatorToke
     const command = ResolveIncidentSchema.safeParse(request.body);
     if (!command.success) return reply.code(400).send(INVALID_REQUEST);
     return runtime.mutate({ ...command.data, action: "resolve", id: request.params.id });
-  });
-
-  app.post<{ Params: { id: string } }>(`${incidentsPath}/:id/coordinator`, { onRequest }, async (request, reply) => {
-    const command = AssignCoordinatorSchema.safeParse(request.body);
-    if (!command.success) return reply.code(400).send(INVALID_REQUEST);
-    return runtime.mutate({ ...command.data, action: "set-coordinator", id: request.params.id });
   });
 }

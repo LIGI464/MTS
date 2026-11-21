@@ -19,7 +19,7 @@ import { AppShell } from "./shell";
 import { EventsButton } from "./shell/events-button";
 
 const STEPS: Array<[DemoStep, string]> = [
-  ["critical", "Критический"], ["assign", "Назначение"], ["deadline", "Срок"], ["resolve", "Решение"],
+  ["critical", "Критический"], ["assign", "Имитировать обновление ITSM"], ["deadline", "Срок"], ["resolve", "Решение"],
 ];
 
 export function App({ dashboard, operatorToken, activity, sound }: {
@@ -28,12 +28,12 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   activity: ReturnType<typeof useIncidentAlerts>;
   sound: ReturnType<typeof useIncidentSound>;
 }) {
-  const [selection, setSelection] = useState<{ id: string; mode: "detail" | "assignment" } | null>(null);
+  const [selection, setSelection] = useState<string | null>(null);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
-  const selected = incidents.find(({ id }) => id === selection?.id);
+  const selected = incidents.find(({ id }) => id === selection);
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient, snapshot?.revision);
   const summary = summarizeQueues(incidents, dashboard.nowMs);
@@ -46,9 +46,9 @@ export function App({ dashboard, operatorToken, activity, sound }: {
     setFilters(DEFAULT_FILTERS);
   }, [resetSeq]);
 
-  function select(id: string, mode: "detail" | "assignment") {
+  function select(id: string) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setSelection({ id, mode });
+    setSelection(id);
   }
 
   function returnFocus() {
@@ -68,7 +68,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       headerActions={
         <>
           <ActivityPanel events={events} unreadCount={unreadCount} highlight={highlight} markRead={markRead}
-            onInspect={(id) => select(id, "detail")}>
+            onInspect={select}>
             <EventsButton count={unreadCount} />
           </ActivityPanel>
           <SoundButton {...sound} />
@@ -126,14 +126,14 @@ export function App({ dashboard, operatorToken, activity, sound }: {
               </p>
             ) : null}
             <IncidentBoard incidents={filtered.incidents} nowMs={dashboard.nowMs} highlight={highlight}
-              onInspect={(id) => select(id, "detail")} onAssign={(id) => select(id, "assignment")} />
+              onInspect={select} />
           </section>
         </>
       ) : null}
       {selection ? (
-        <IncidentDetails key={selection.id} id={selection.id} mode={selection.mode} incident={selected}
+        <IncidentDetails key={selection} id={selection} incident={selected}
           nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision} operatorToken={operatorToken}
-          runAnalysis={dashboard.runAnalysis} sseRevision={dashboard.sseRevision}
+          runAnalysis={dashboard.runAnalysis}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
     </AppShell>

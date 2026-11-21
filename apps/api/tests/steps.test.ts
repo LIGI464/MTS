@@ -9,7 +9,7 @@ const toBytes = (data: unknown) => Buffer.from(JSON.stringify(data), "utf8");
 const fromBytes = (bytes: Uint8Array): unknown => JSON.parse(new TextDecoder().decode(bytes));
 
 describe("demo file steps", () => {
-  it("promotes, assigns and resolves the same incident while retaining other export fields", () => {
+  it("promotes and resolves the same incident while retaining other export fields", () => {
     const critical = {
       id: "p-01",
       sysId: "00042",
@@ -42,7 +42,6 @@ describe("demo file steps", () => {
         priorityId: 4,
         "Категория": "Наивысший",
         priority: "Наивысший",
-        assignedGroupName: COORDINATOR_TEAM,
         stateEnum: "Resolved",
         stateId: 7,
         state: "Завершен",

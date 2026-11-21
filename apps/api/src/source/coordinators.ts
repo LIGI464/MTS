@@ -36,24 +36,24 @@ export async function readCoordinatorDirectory(dataDir: string): Promise<Coordin
 
 export function projectCoordinators(
   data: NormalizedIncidents,
-  directory: readonly Coordinator[],
-  assignments: ReadonlyMap<string, Coordinator>,
+  project: CoordinatorProjection,
 ): NormalizedIncidents {
-  const byName = new Map(directory.map((coordinator) => [coordinator.name, coordinator]));
-  const projected = new Map<string, NormalizedIncidents["incidents"][number]>();
   const records = data.records.map((record) => {
     const { incident, raw } = record;
-    let coordinator = assignments.get(incident.id);
-    if (!coordinator) {
-      const name = exportedName(raw);
-      if (name) coordinator = byName.get(name) ?? exportedCoordinator(name);
-    }
-    if (!coordinator) return record;
-
-    const version = sha256(JSON.stringify([incident.version, coordinator.id, coordinator.name]));
-    const updated = { ...incident, coordinator, version };
-    projected.set(updated.id, updated);
-    return { ...record, incident: updated };
+    const coordinator = project(raw);
+    const version = coordinator ? sha256(JSON.stringify([incident.version, coordinator.id, coordinator.name])) : incident.version;
+    return { ...record, incident: { ...incident, coordinator, version } };
   });
-  return { ...data, records, incidents: data.incidents.map((incident) => projected.get(incident.id) ?? incident) };
+  const byId = new Map(records.map(({ incident }) => [incident.id, incident]));
+  return { ...data, records, incidents: data.incidents.map((incident) => byId.get(incident.id)!) };
+}
+
+export type CoordinatorProjection = (raw: RawIncidentFields | undefined) => Coordinator | null;
+
+export function createCoordinatorProjection(directory: readonly Coordinator[]): CoordinatorProjection {
+  const byName = new Map(directory.map((coordinator) => [coordinator.name, coordinator]));
+  return (raw) => {
+    const name = raw && exportedName(raw);
+    return name ? byName.get(name) ?? exportedCoordinator(name) : null;
+  };
 }

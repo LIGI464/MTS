@@ -8,16 +8,6 @@ const count = z.int().nonnegative();
 const requestId = z.uuid();
 
 export const CoordinatorListSchema = z.array(CoordinatorSchema);
-export const AssignCoordinatorSchema = z.strictObject({
-  coordinatorId: nonEmpty,
-  expectedVersion: IncidentSchema.shape.version,
-  requestId,
-});
-export const AssignCoordinatorResultSchema = z.strictObject({
-  id: IncidentSchema.shape.id,
-  version: IncidentSchema.shape.version,
-  revision: count,
-});
 
 const ticketSummary = IncidentSchema.pick({
   id: true, version: true, title: true, product: true, service: true, team: true, assignee: true,
@@ -63,8 +53,6 @@ export const ImportApplyResultSchema = z.strictObject({ revision: count });
 
 export type Coordinator = z.infer<typeof CoordinatorSchema>;
 export type CoordinatorList = z.infer<typeof CoordinatorListSchema>;
-export type AssignCoordinator = z.infer<typeof AssignCoordinatorSchema>;
-export type AssignCoordinatorResult = z.infer<typeof AssignCoordinatorResultSchema>;
 export type TicketSummary = z.infer<typeof ticketSummary>;
 export type HistoryEntry = z.infer<typeof historyEntry>;
 export type FullTicketDetail = z.infer<typeof FullTicketDetailSchema>;

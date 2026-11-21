@@ -16,11 +16,11 @@ describe("priority queues", () => {
     expect(research.state).toBe("Research");
   });
 
-  it("reads explicit coordinator assignments and supports old snapshots", () => {
+  it("requires a confirmed coordinator even if a legacy card has an assignee in the coordinator team", () => {
     const [incident] = timeline.initial.incidents;
     expect(incidentCoordinator(incident)).toBeNull();
     const legacy = { ...incident, team: COORDINATOR_TEAM };
-    expect(incidentCoordinator(legacy)?.name).toBe(incident.assignee);
+    expect(incidentCoordinator(legacy)).toBeNull();
     expect(incidentCoordinator({ ...legacy, coordinator: null })).toBeNull();
     expect(incidentCoordinator({ ...incident, coordinator: { id: "operator", name: "Оператор" } })?.id).toBe("operator");
   });

@@ -1,6 +1,6 @@
 import {
-  API_PREFIX, AssignCoordinatorResultSchema, AssignCoordinatorSchema, CoordinatorListSchema, FullTicketDetailSchema,
-  type AssignCoordinator, type AssignCoordinatorResult, type CoordinatorList, type FullTicketDetail, type Incident,
+  API_PREFIX, CoordinatorListSchema, FullTicketDetailSchema,
+  type CoordinatorList, type FullTicketDetail, type Incident,
 } from "@mts/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { DashboardRequestError, errorFromBody } from "./api";
@@ -8,8 +8,6 @@ import { DashboardRequestError, errorFromBody } from "./api";
 export type IncidentClient = {
   detail: (id: string, signal?: AbortSignal) => Promise<FullTicketDetail>;
   coordinators: (signal?: AbortSignal) => Promise<CoordinatorList>;
-  assign: (id: string, body: AssignCoordinator, token?: string) => Promise<AssignCoordinatorResult>;
-  mock?: boolean;
 };
 
 const ticketPath = (id: string) => `${API_PREFIX}/itsm/incidents/${encodeURIComponent(id)}`;
@@ -23,17 +21,6 @@ export const incidentApi: IncidentClient = {
   async coordinators(signal) {
     const result = CoordinatorListSchema.safeParse(await incidentRequest(`${API_PREFIX}/coordinators`, { signal }));
     if (!result.success) return invalidResponse();
-    return result.data;
-  },
-  async assign(id, body, token) {
-    const headers = new Headers({ "content-type": "application/json" });
-    if (token?.trim()) headers.set("authorization", `Bearer ${token.trim()}`);
-    const result = AssignCoordinatorResultSchema.safeParse(await incidentRequest(`${ticketPath(id)}/coordinator`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(AssignCoordinatorSchema.parse(body)),
-    }));
-    if (!result.success || result.data.id !== id) return invalidResponse();
     return result.data;
   },
 };

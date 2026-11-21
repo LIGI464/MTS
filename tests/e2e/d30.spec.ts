@@ -1,8 +1,8 @@
 import {
-  API_PREFIX, AssignCoordinatorResultSchema, COORDINATOR_TEAM, FullTicketDetailSchema,
-  ImportApplyRequestSchema, ImportApplyResultSchema, SnapshotSchema, type RawIncidentFields,
+  API_PREFIX, COORDINATOR_TEAM, FullTicketDetailSchema,
+  ImportApplyRequestSchema, ImportApplyResultSchema, SnapshotSchema, type MutationResult, type RawIncidentFields,
 } from "@mts/contracts";
-import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createIncidentFixtures } from "../../apps/web/src/data/incident-fixtures";
@@ -13,7 +13,6 @@ const ids = {
   second: "INC000000000002",
   archived: "INC000000000005",
 };
-const limit = { timeout: 20_000 };
 const listing = "/itsm/incidents";
 const dashboard = "/admin/incidents";
 const developer = "/admin/developers";
@@ -27,7 +26,7 @@ const ticketPath = (id: string) => `${listing}/${encodeURIComponent(id)}`;
 
 test("D30 обслуживает прямые маршруты и 24/44 записи в живом Fastify", async ({ page }, testInfo) => {
   const fixtures = createIncidentFixtures(Date.now());
-  const client = fixtures.client(() => {});
+  const { client } = fixtures;
   const rows = await Promise.all(fixtures.initial.incidents.map(async ({ id }) => (await client.detail(id)).rawFields));
   const id = "SYN-D30 /01.5";
   const title = "Массовый отказ авторизации";
@@ -96,7 +95,7 @@ test("D30 обслуживает прямые маршруты и 24/44 запи
   }
 });
 
-test("D30 проводит сценарии разработчика, персональное назначение и решение в двух контекстах", async ({ browser }, testInfo) => {
+test("D30 проводит сценарии разработчика, чтение координатора из ITSM и решение в двух контекстах", async ({ browser }, testInfo) => {
   const app = await startDashboard("rules", "", { coordinators: coordinatorDirectory });
   const operator = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const observer = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -118,8 +117,8 @@ test("D30 проводит сценарии разработчика, персо
     await create.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); });
     const receipt = await receiptPromise;
     expect(receipt.status()).toBe(200);
-    const created = AssignCoordinatorResultSchema.parse(await receipt.json());
-    const { id } = created;
+    const { id } = await receipt.json() as MutationResult;
+    expect(id).toMatch(/^INC-SYN-/);
     await expect(actions.getByRole("status").getByText(`Запись подтверждена. ID ${id}.`)).toBeVisible();
     await expect(actions.getByRole("combobox", { name: "Активная заявка" })).toHaveValue(id);
     for (const board of [left, right]) {
@@ -132,8 +131,7 @@ test("D30 проводит сценарии разработчика, персо
     await registry.goto(app.url + listing, { waitUntil: "domcontentloaded" });
     await expect(registry.getByRole("link", { name: id, exact: true })).toHaveCount(1);
 
-    await runScenario(actions, "Назначить координаторам", "assign");
-    for (const board of [left, right]) await expect(card(board, id).getByText(COORDINATOR_TEAM)).toBeVisible();
+    await expect(actions.getByRole("button", { name: "Назначить координаторам", exact: true })).toHaveCount(0);
     const beforeDeadline = await liveRows(app);
     await runScenario(actions, "Изменить срок", "deadline");
     const afterDeadline = await liveRows(app);
@@ -145,16 +143,29 @@ test("D30 проводит сценарии разработчика, персо
     await expect(right.getByRole("region", { name: "Критические", exact: true }).locator(card(right, ids.first))).toHaveCount(1);
     await actions.screenshot({ path: testInfo.outputPath("developers-1440x900.png"), animations: "disabled" });
 
-    await (await openService(left)).getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
-    await returnToBoard(left);
-    await card(left, id).getByRole("button", { name: "Назначить координатора", exact: true }).click();
-    await chooseCoordinator(left.getByRole("dialog"), "irina");
+    const putCoordinator = async (name: string) => {
+      const rows = await liveRows(app);
+      await writeLive(app.dataDir, JSON.stringify(rows.map((row) => row.id === id
+        ? { ...row, assignedGroupName: COORDINATOR_TEAM, assignedEmployee: name }
+        : row)));
+    };
+    await putCoordinator(coordinatorDirectory[0].name);
+    for (const board of [left, right]) {
+      await expect(card(board, id).getByText(COORDINATOR_TEAM)).toBeVisible();
+      await expect(card(board, id).getByText("ITSM", { exact: true })).toBeVisible();
+    }
+    const inspect = card(left, id).getByRole("button", { name: "Подробнее" });
+    await inspect.click();
+    const leftDetail = left.getByRole("dialog");
+    await expect(leftDetail.locator("dd").filter({ hasText: "ITSM" })).toHaveText(`${coordinatorDirectory[0].name} ITSM`);
+    await expect(leftDetail.getByRole("button", { name: /назначить|сменить координатора/i })).toHaveCount(0);
+    await putCoordinator(coordinatorDirectory[1].name);
+    await expect(leftDetail.locator("dd").filter({ hasText: "ITSM" })).toHaveText(`${coordinatorDirectory[1].name} ITSM`);
+    await expect(card(right, id).locator("p").filter({ hasText: "Координатор ·" })).toHaveText(
+      `Координатор · ${coordinatorDirectory[1].name} ITSM`,
+    );
     await left.keyboard.press("Escape");
-    await expect(card(right, id).getByText("Координатор · Ирина Волкова")).toBeVisible();
-    await card(left, id).getByRole("button", { name: "Подробнее" }).click();
-    await chooseCoordinator(left.getByRole("dialog"), "maksim");
-    await left.keyboard.press("Escape");
-    await expect(card(right, id).getByText("Координатор · Максим Орлов")).toBeVisible();
+    await expect(inspect).toBeFocused();
     await right.getByRole("button", { name: "У координатора", exact: true }).click();
     await right.getByRole("button", { name: "Фильтры", exact: true }).click();
     const coordinatorFilter = right.getByRole("combobox", { name: "Координатор", exact: true });
@@ -175,6 +186,8 @@ test("D30 проводит сценарии разработчика, персо
 
     await registry.getByRole("link", { name: id, exact: true }).click();
     await expect(registry.getByRole("heading", { name: "Синтетическая критическая заявка", exact: true })).toBeVisible();
+    await expect(registry.getByRole("region", { name: "Данные заявки" }).locator("dd").filter({ hasText: "ITSM" }))
+      .toHaveText(`${coordinatorDirectory[1].name} ITSM`);
     await expect(registry.getByRole("button", { name: "Сохранить решение" })).toHaveCount(0);
     await registry.getByText("Доступ оператора", { exact: true }).click();
     await registry.getByLabel("Токен оператора").fill(OPERATOR_TOKEN);
@@ -325,12 +338,6 @@ async function runScenario(page: Page, name: string, action: string) {
   await page.getByRole("button", { name, exact: true }).click();
   expect((await response).status()).toBe(200);
   await expect(page.getByRole("status").getByText(/Запись подтверждена/)).toBeVisible();
-}
-
-async function chooseCoordinator(dialog: Locator, id: string) {
-  await dialog.getByRole("combobox", { name: "Координатор для назначения" }).selectOption(id);
-  await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(dialog.getByText("Координатор обновлён")).toBeVisible(limit);
 }
 
 async function snapshot(request: APIRequestContext, app: RunningApp) {

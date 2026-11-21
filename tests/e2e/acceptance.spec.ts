@@ -1,3 +1,4 @@
+import { COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { applyDemoStep, openService, OPERATOR_TOKEN, readLive, removeLive, returnToBoard, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
 
@@ -38,6 +39,13 @@ function card(page: Page, groupName: string, id: string): Locator {
   return group(page, groupName).locator("article").filter({ hasText: id });
 }
 
+async function updateCoordinatorTeam(app: RunningApp) {
+  const rows: RawIncidentFields[] = JSON.parse(await readLive(app.dataDir));
+  await writeLive(app.dataDir, JSON.stringify(rows.map((row) => row.id === HIGH_ID
+    ? { ...row, assignedGroupName: COORDINATOR_TEAM }
+    : row)));
+}
+
 test("A1 показывает четыре группы и обе точки входа", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app, "/");
@@ -70,7 +78,7 @@ test("A2 показывает Research по фильтру в одной оче�
   await expect(research.locator("[title='Срок не задан']")).toBeVisible();
 });
 
-test("A3–A6 и A11 проводят critical, assign, deadline, resolve и сброс у разработчиков", async ({ page }) => {
+test("A3–A6 и A11 проводят сценарии, обновление ITSM и сброс у разработчиков", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app);
   await expect(page.locator("main").getByRole("button", { name: "Сбросить демо" })).toHaveCount(0);
@@ -80,7 +88,7 @@ test("A3–A6 и A11 проводят critical, assign, deadline, resolve и с�
   await expect(critical).toBeVisible();
   await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
 
-  applyDemoStep(app.dataDir, "assign");
+  await updateCoordinatorTeam(app);
   await expect(critical.getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
   await expect(page.locator(`[data-incident-id="${HIGH_ID}"]`)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
@@ -241,7 +249,7 @@ test("A10 после обрыва SSE не повторяет оповещени
 
   await app.halt();
   await expect(page.getByText("Переподключение")).toBeVisible();
-  applyDemoStep(app.dataDir, "assign");
+  await updateCoordinatorTeam(app);
   await app.resume();
   await expect(page.getByText("Данные актуальны")).toBeVisible();
   await expect(card(page, "Критические", HIGH_ID).getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();

@@ -1,4 +1,4 @@
-import { COORDINATOR_TEAM, type Incident, type Priority } from "@mts/contracts";
+import type { Incident, Priority } from "@mts/contracts";
 
 export const PRIORITIES = [
   { id: 4, title: "Критические", label: "Критический" },
@@ -28,10 +28,8 @@ function compareIncidents(left: Incident, right: Incident): number {
   return right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id);
 }
 
-export function incidentCoordinator(incident: Pick<Incident, "coordinator" | "team" | "assignee">) {
-  if (incident.coordinator !== undefined) return incident.coordinator;
-  const name = incident.team === COORDINATOR_TEAM ? incident.assignee?.trim() : null;
-  return name ? { id: name, name } : null;
+export function incidentCoordinator(incident: Pick<Incident, "coordinator">) {
+  return incident.coordinator ?? null;
 }
 
 export function displayText(value: string | null, empty: string): string {

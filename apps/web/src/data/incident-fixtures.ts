@@ -1,5 +1,5 @@
 import {
-  AssignCoordinatorResultSchema, AssignCoordinatorSchema, COORDINATOR_TEAM, CoordinatorListSchema,
+  COORDINATOR_TEAM, CoordinatorListSchema,
   FullTicketDetailSchema, SnapshotSchema, STATE_LABELS, isActiveState, makeMockTimeline,
   type FullTicketDetail, type Incident, type Notice, type Priority, type RawIncidentFields, type Snapshot,
 } from "@mts/contracts";
@@ -43,8 +43,8 @@ export function createIncidentFixtures(nowMs: number) {
       ...example,
       id: `INC${String(index + 4).padStart(12, "0")}`,
       version: `fixture-${index + 4}`,
-      title, product, service, team, coordinator,
-      assignee: index % 3 === 0 ? "Алексей Смирнов" : null,
+      title, product, service, team: coordinator ? COORDINATOR_TEAM : team, coordinator,
+      assignee: coordinator?.name ?? (index % 3 === 0 ? "Алексей Смирнов" : null),
       state, stateLabel: STATE_LABELS[state], priority,
       createdAt: at(-120 - index * 70),
       dueAt: [5, 20, 37, 39].includes(index) ? null : at([-70, 18, 190, 52, -15, 29][index % 6]),
@@ -58,7 +58,6 @@ export function createIncidentFixtures(nowMs: number) {
   let current = initial;
   let seq = 0;
   const details = new Map<string, FullTicketDetail>();
-  const requests = new Map<string, { id: string; fingerprint: string; result: ReturnType<typeof AssignCoordinatorResultSchema.parse> }>();
 
   function makeDetail(incident: Incident, prior?: FullTicketDetail): FullTicketDetail {
     const { id, version, title, product, service, team, assignee, coordinator, state, stateLabel, priority,
@@ -104,34 +103,10 @@ export function createIncidentFixtures(nowMs: number) {
     return entry;
   }
 
-  const client = (onFrame: (snapshot: Snapshot) => void): IncidentClient => ({
-    mock: true,
+  const client: IncidentClient = {
     async detail(id) { return detail(id); },
     async coordinators() { return coordinators; },
-    async assign(id, input) {
-      const body = AssignCoordinatorSchema.parse(input);
-      const fingerprint = JSON.stringify(body);
-      const retry = requests.get(body.requestId);
-      if (retry) {
-        if (retry.id === id && retry.fingerprint === fingerprint) return retry.result;
-        throw new DashboardRequestError("REQUEST_CONFLICT", "Запрос уже использован", 409);
-      }
-      if (detail(id).ticket.version !== body.expectedVersion) {
-        throw new DashboardRequestError("VERSION_CONFLICT", "Карточка изменилась", 409);
-      }
-      const coordinator = coordinators.find((item) => item.id === body.coordinatorId);
-      if (!coordinator) throw new DashboardRequestError("COORDINATOR_NOT_FOUND", "Координатор не найден", 404);
-      const incident = current.incidents.find((item) => item.id === id)!;
-      const version = `fixture-${id}-${current.revision + 1}`;
-      const frame = publish({ ...incident, version, coordinator }, {
-        kind: "coordinator.changed", incidentId: id, title: incident.title,
-      }, current.serverNow);
-      const result = AssignCoordinatorResultSchema.parse({ id, version, revision: frame.revision });
-      requests.set(body.requestId, { id, fingerprint, result });
-      queueMicrotask(() => onFrame(frame));
-      return result;
-    },
-  });
+  };
 
   function step(step: DemoStep, actualNow: number) {
     const [critical, timer] = current.incidents;
@@ -148,7 +123,7 @@ export function createIncidentFixtures(nowMs: number) {
     const change = step === "critical"
       ? { priority: template.priority, state: template.state, stateLabel: template.stateLabel, resolvedAt: null }
       : step === "assign"
-        ? { team: COORDINATOR_TEAM, coordinator: coordinators[0] }
+        ? { team: COORDINATOR_TEAM, assignee: coordinators[0].name, coordinator: coordinators[0] }
         : { state: template.state, stateLabel: template.stateLabel, resolvedAt: serverNow };
     const kind = step === "critical" ? "critical.new" : step === "assign" ? "coordinator.assigned" : "critical.resolved";
     return publish({ ...target, ...change, version }, { kind, incidentId: target.id, title: target.title }, serverNow);

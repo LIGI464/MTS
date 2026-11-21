@@ -154,6 +154,35 @@ describe("dashboard source runtime", () => {
     }));
   });
 
+  it("clears an unconfirmed cached coordinator when no accepted raw record exists", async () => {
+    const rows = [
+      raw("card", { assignedGroupName: COORDINATOR_TEAM, assignedEmployee: "   " }),
+      raw("research", { assignedGroupName: COORDINATOR_TEAM, stateEnum: "Research" }),
+    ];
+    await atomicWrite(livePath, encode(rows));
+    const source = await start();
+    const original = source.getSnapshot();
+    expect(original.groups.coordinator).toEqual(["card", "research"]);
+    expect(original.incidents.map(({ coordinator }) => coordinator)).toEqual([null, null]);
+    await source.close();
+
+    const database = new DatabaseSync(join(dataDir, "dashboard.sqlite"));
+    try {
+      database.exec("DELETE FROM itsm_incidents; DELETE FROM itsm_history;");
+      const cached = original.incidents.map((incident) => ({
+        ...incident, coordinator: { id: "previous", name: "Старое ручное назначение" },
+      }));
+      database.prepare("UPDATE dashboard SET incidents = ?").run(JSON.stringify(cached));
+    } finally {
+      database.close();
+    }
+    await rm(livePath);
+
+    const restarted = await start();
+    expect(restarted.getSnapshot()).toEqual({ ...original, source: { ...original.source, status: "stale" } });
+    expect(restarted.listTickets().items).toEqual([]);
+  });
+
   it("ignores ordering and formatting changes and restores the same revision after invalid input", async () => {
     const records = [raw("a"), raw("b", { description: "Серверное описание" })];
     await atomicWrite(livePath, encode(records));

@@ -302,19 +302,18 @@
   color: var(--text);
 }
 
-.assignment {
-  color: var(--info);
-  padding-left: 0;
-  justify-content: start;
-  margin-right: auto;
-}
-
-.assignment:hover {
-  text-decoration: underline;
+.sourceTag {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.75em;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 @media (min-width: 1150px) {
   .board { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .actions { width: 100%; }
-  .assignment { width: 100%; }
 }
