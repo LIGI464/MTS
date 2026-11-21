@@ -34,6 +34,20 @@ describe("codex.sale Responses transport", () => {
     });
   });
 
+  it("sends system instructions separately from the user input", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ output_text: "ok" }));
+    await expect(requestProviderText(config, {
+      instructions: "Системный промт",
+      input: '{"question":"test"}',
+    }, fetchImpl)).resolves.toBe("ok");
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({
+      model: "mock-model",
+      instructions: "Системный промт",
+      input: '{"question":"test"}',
+      stream: false,
+    });
+  });
+
   it("accepts a compatible top-level output_text and defaults an empty URL", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ output_text: " Compatible " }));
     await expect(requestProviderText({ ...config, baseUrl: "" }, "prepared", fetchImpl)).resolves.toBe("Compatible");

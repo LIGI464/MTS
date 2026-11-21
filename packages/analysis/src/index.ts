@@ -47,6 +47,7 @@ const modelInstructions = [
 
 export { createAssistantResponder } from "./assistant.js";
 export type { AssistantInput, AssistantResponder, AssistantSearchStatus, PreparedAssistant } from "./assistant.js";
+export { ASSISTANT_PROMPT_VERSION, ASSISTANT_SYSTEM_PROMPT } from "./assistant-prompts.js";
 
 export function createAnalyzer(config: AnalyzerConfig): Analyzer {
   const apiKey = config.apiKey?.trim();

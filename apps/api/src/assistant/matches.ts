@@ -3,6 +3,7 @@ import type { TicketSummary } from "@mts/contracts";
 export const MAX_MATCH_TEXT_LENGTH = 4_000;
 const MAX_QUERY_LENGTH = 1_000;
 const MAX_MATCHES = 5;
+const MAX_ACTIVE_SIMILAR = 5;
 
 export type ArchiveMatchTicket = Pick<TicketSummary,
   "id" | "version" | "title" | "state" | "resolvedAt" | "present" | "product" | "service"
@@ -21,15 +22,29 @@ export type SimilarIncident = Pick<ArchiveMatchTicket, "id" | "version" | "title
   href: string;
 };
 
+export type ActiveSimilarIncident = Pick<ArchiveMatchTicket, "id" | "version" | "title" | "present"> & {
+  state: TicketSummary["state"];
+  symptom: string | null;
+  reason: string;
+  href: string;
+};
+
+export type ComparisonCoverage = {
+  uniqueAvailable: number;
+  uniqueExamined: number;
+  complete: boolean;
+};
+
 export type SimilarIncidentsQuery = { incidentId?: string; symptoms?: string };
 
 export type SimilarIncidentsResult =
-  | { kind: "found"; matches: readonly SimilarIncident[] }
-  | { kind: "no_matches" | "needs_context" | "incident_not_found" };
+  | { kind: "found"; matches: readonly SimilarIncident[]; coverage: ComparisonCoverage; activeSimilar: readonly ActiveSimilarIncident[] }
+  | { kind: "no_matches"; coverage: ComparisonCoverage; activeSimilar: readonly ActiveSimilarIncident[] }
+  | { kind: "needs_context" | "incident_not_found" };
 
 type Archive = {
   getSearchTicket(id: string): ArchiveMatchTicket | null;
-  completedSearchTickets(): Iterable<ArchiveMatchTicket>;
+  allSearchTickets(): Iterable<ArchiveMatchTicket>;
 };
 
 function normalize(value: string | null): string {
@@ -45,7 +60,7 @@ function stem(word: string): string {
 const generic = new Set(normalize(
   "для при или как что это тот такая там после где есть был была было уже надо можно нужно почему чтобы " +
   "инцидент инцидента инциденту инциденты инцидентов заявка заявки заявок проблема проблемы ошибка ошибки " +
-  "сбой сбоя сбои сбоев похожие сходные завершенные решенные прошлые другие архив карточка итсм найди найти покажи " +
+  "сбой сбоя сбои сбои сбоев похожие сходные завершенные решенные прошлые другие архив карточка итсм найди найти покажи " +
   "подбери поиск аналог аналоги аналогов ранее оператор сервис продукт данные номер номеру работает работают",
 ).split(" ").map(stem));
 
@@ -75,12 +90,78 @@ function boundedText(value: string | null, max: number): string | null {
   return text.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/u, "").trimEnd() + "…";
 }
 
-type RankedMatch = { score: number; match: SimilarIncident };
+type RankedCandidate = {
+  score: number;
+  reason: string;
+  candidate: ArchiveMatchTicket;
+};
 
-function compareMatches(left: RankedMatch, right: RankedMatch): number {
+function compareRanked(left: RankedCandidate, right: RankedCandidate): number {
   return right.score - left.score ||
-    (right.match.resolvedAt ?? "").localeCompare(left.match.resolvedAt ?? "") ||
-    (left.match.id < right.match.id ? -1 : Number(left.match.id > right.match.id));
+    (right.candidate.resolvedAt ?? "").localeCompare(left.candidate.resolvedAt ?? "") ||
+    (left.candidate.id < right.candidate.id ? -1 : Number(left.candidate.id > right.candidate.id));
+}
+
+function isCompleted(state: ArchiveMatchTicket["state"]): state is "Resolved" | "Closed" {
+  return state === "Resolved" || state === "Closed";
+}
+
+function scoreCandidate(
+  subject: ArchiveMatchTicket | null,
+  candidate: ArchiveMatchTicket,
+  cues: ReadonlySet<string>,
+): RankedCandidate | null {
+  const subjectWords = subject ? symptomTokens(subject, tokens(subject.product, subject.service)) : new Set<string>();
+  const product = normalize(subject?.product ?? null);
+  const service = normalize(subject?.service ?? null);
+  const category = tokens(candidate.product, candidate.service);
+  const words = symptomTokens(candidate, category);
+  const shared = overlap(subjectWords, words);
+  const sharedCues = overlap(cues, words);
+  const sameProduct = product !== "" && normalize(candidate.product) === product;
+  const sameService = service !== "" && normalize(candidate.service) === service;
+  const symptomCueCount = cues.size - overlap(cues, category);
+  const enoughCues = sharedCues >= 2 || (sharedCues === 1 && symptomCueCount === 1);
+  const enoughContext = shared >= 2 || (shared >= 1 && (sameProduct || sameService));
+  if (!enoughContext && !enoughCues) return null;
+
+  const fields = [sameProduct && "продукт", sameService && "сервис", "признаки сбоя"].filter(Boolean);
+  return {
+    score: 3 * shared + 5 * sharedCues + 3 * Number(sameProduct) + 2 * Number(sameService),
+    reason: `Совпадают ${fields.join(", ")}.`,
+    candidate,
+  };
+}
+
+function buildSimilarMatch(
+  candidate: ArchiveMatchTicket & { state: "Resolved" | "Closed" },
+  reason: string,
+  resolveItsmUrl: (ticket: ArchiveMatchTicket) => string | null,
+): SimilarIncident {
+  const { id, version, title, state, resolvedAt, present } = candidate;
+  return {
+    id, version, state, resolvedAt, present,
+    title: boundedText(title, 220) ?? id,
+    symptom: boundedText(candidate.shortDescription, 320) ?? boundedText(candidate.description, 320),
+    solution: boundedText(candidate.solution, 600),
+    reason,
+    href: resolveItsmUrl(candidate) ?? `/itsm/incidents/${encodeURIComponent(id)}`,
+  };
+}
+
+function buildActiveMatch(
+  candidate: ArchiveMatchTicket,
+  reason: string,
+  resolveItsmUrl: (ticket: ArchiveMatchTicket) => string | null,
+): ActiveSimilarIncident {
+  const { id, version, title, state, present } = candidate;
+  return {
+    id, version, state, present,
+    title: boundedText(title, 220) ?? id,
+    symptom: boundedText(candidate.shortDescription, 320) ?? boundedText(candidate.description, 320),
+    reason,
+    href: resolveItsmUrl(candidate) ?? `/itsm/incidents/${encodeURIComponent(id)}`,
+  };
 }
 
 export function findSimilarIncidents(
@@ -94,40 +175,47 @@ export function findSimilarIncidents(
   const cues = tokens(symptoms?.slice(0, MAX_QUERY_LENGTH) ?? null);
   if (!subject && cues.size === 0) return { kind: "needs_context" };
 
-  const subjectWords = subject ? symptomTokens(subject, tokens(subject.product, subject.service)) : new Set<string>();
-  const product = normalize(subject?.product ?? null);
-  const service = normalize(subject?.service ?? null);
-  const ranked: RankedMatch[] = [];
+  const ranked: RankedCandidate[] = [];
+  let uniqueAvailable = 0;
+  let uniqueExamined = 0;
 
-  for (const candidate of archive.completedSearchTickets()) {
-    if (candidate.id === incidentId || (candidate.state !== "Resolved" && candidate.state !== "Closed")) continue;
-    const category = tokens(candidate.product, candidate.service);
-    const words = symptomTokens(candidate, category);
-    const shared = overlap(subjectWords, words);
-    const sharedCues = overlap(cues, words);
-    const sameProduct = product !== "" && normalize(candidate.product) === product;
-    const sameService = service !== "" && normalize(candidate.service) === service;
-    const symptomCueCount = cues.size - overlap(cues, category);
-    const enoughCues = sharedCues >= 2 || (sharedCues === 1 && symptomCueCount === 1);
-    const enoughContext = shared >= 2 || (shared >= 1 && (sameProduct || sameService));
-    if (!enoughContext && !enoughCues) continue;
-
-    const fields = [sameProduct && "продукт", sameService && "сервис", "признаки сбоя"].filter(Boolean);
-    const { id, version, title, state, resolvedAt, present } = candidate;
-    ranked.push({
-      score: 3 * shared + 5 * sharedCues + 3 * Number(sameProduct) + 2 * Number(sameService),
-      match: {
-        id, version, state, resolvedAt, present,
-        title: boundedText(title, 220) ?? id,
-        symptom: boundedText(candidate.shortDescription, 320) ?? boundedText(candidate.description, 320),
-        solution: boundedText(candidate.solution, 600),
-        reason: `Совпадают ${fields.join(", ")}.`,
-        href: resolveItsmUrl(candidate) ?? `/itsm/incidents/${encodeURIComponent(id)}`,
-      },
-    });
-    ranked.sort(compareMatches);
-    if (ranked.length > MAX_MATCHES) ranked.pop();
+  for (const candidate of archive.allSearchTickets()) {
+    if (candidate.id === incidentId) continue;
+    uniqueAvailable += 1;
+    uniqueExamined += 1;
+    const scored = scoreCandidate(subject, candidate, cues);
+    if (!scored) continue;
+    ranked.push(scored);
   }
 
-  return ranked.length > 0 ? { kind: "found", matches: ranked.map(({ match }) => match) } : { kind: "no_matches" };
+  ranked.sort(compareRanked);
+
+  const coverage: ComparisonCoverage = {
+    uniqueAvailable,
+    uniqueExamined,
+    complete: true,
+  };
+
+  const matches: SimilarIncident[] = [];
+  const activeSimilar: ActiveSimilarIncident[] = [];
+
+  for (const entry of ranked) {
+    if (isCompleted(entry.candidate.state)) {
+      if (matches.length < MAX_MATCHES) {
+        matches.push(buildSimilarMatch(
+          entry.candidate as ArchiveMatchTicket & { state: "Resolved" | "Closed" },
+          entry.reason,
+          resolveItsmUrl,
+        ));
+      }
+    } else if (activeSimilar.length < MAX_ACTIVE_SIMILAR) {
+      activeSimilar.push(buildActiveMatch(entry.candidate, entry.reason, resolveItsmUrl));
+    }
+    if (matches.length >= MAX_MATCHES && activeSimilar.length >= MAX_ACTIVE_SIMILAR) break;
+  }
+
+  if (matches.length > 0) {
+    return { kind: "found", matches, coverage, activeSimilar };
+  }
+  return { kind: "no_matches", coverage, activeSimilar };
 }

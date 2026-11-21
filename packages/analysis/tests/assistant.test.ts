@@ -9,6 +9,17 @@ if (!incident) throw new Error("mock incident is missing");
 const config = { baseUrl: "https://codex.sale/v1", timeoutMs: 1000 };
 const responder = createAssistantResponder(config);
 
+const emptyLogic = {
+  history: [] as const,
+  activeSimilar: [] as const,
+  coverage: null,
+  compareWith: null,
+  compareDescription: null,
+  compareNotFound: null,
+  dashboardFacts: null,
+  useComparisonPrompt: false,
+};
+
 const match = {
   id: "INC-PAST",
   version: "past-1",
@@ -35,6 +46,7 @@ describe("assistant rules response", () => {
       searchStatus: "needs_context",
       matches: [],
       now,
+      ...emptyLogic,
     }), { useLive: false });
 
     const noMatches = await responder.run(responder.prepare({
@@ -46,6 +58,8 @@ describe("assistant rules response", () => {
       searchStatus: "no_matches",
       matches: [],
       now,
+      ...emptyLogic,
+      useComparisonPrompt: true,
     }), { useLive: false });
 
     const answered = await responder.run(responder.prepare({
@@ -57,6 +71,8 @@ describe("assistant rules response", () => {
       searchStatus: "answered",
       matches: [match],
       now,
+      ...emptyLogic,
+      useComparisonPrompt: true,
     }), { useLive: false });
 
     expect(AssistantChatResponseSchema.parse(needsContext)).toMatchObject({

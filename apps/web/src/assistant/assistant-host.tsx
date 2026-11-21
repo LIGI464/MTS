@@ -1,4 +1,9 @@
-import type { AssistantChatRequest, AssistantChatResponse, Incident } from "@mts/contracts";
+import type {
+  AssistantChatHistoryEntry,
+  AssistantChatRequest,
+  AssistantChatResponse,
+  Incident,
+} from "@mts/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { Icon } from "../icons";
 import { AssistantPanel } from "./assistant-panel";
@@ -16,6 +21,18 @@ export type AssistantClient = (
   payload: AssistantChatRequest,
   token?: string,
 ) => Promise<AssistantChatResponse>;
+
+function chatHistory(messages: SessionState["messages"]): AssistantChatHistoryEntry[] {
+  const history: AssistantChatHistoryEntry[] = [];
+  for (const message of messages) {
+    if (message.kind === "user" && message.text.trim()) {
+      history.push({ role: "user", text: message.text.trim() });
+    } else if (message.kind === "assistant") {
+      history.push({ role: "assistant", text: message.response.summary });
+    }
+  }
+  return history.slice(-16);
+}
 
 export function AssistantHost({
   detailsOpen,
@@ -67,6 +84,7 @@ export function AssistantHost({
       mode: active.mode,
       question: question.trim(),
       context: active.context,
+      history: chatHistory(active.messages),
     };
     try {
       const response = await requestChat(payload, operatorToken);

@@ -9,6 +9,11 @@ type ProviderConfig = {
   timeoutMs: number;
 };
 
+export type ProviderTextRequest = {
+  instructions?: string;
+  input: string;
+};
+
 type ProviderFailure = "timeout" | "provider_error" | "invalid_output";
 
 export class ProviderError extends Error {
@@ -23,9 +28,11 @@ export class ProviderError extends Error {
 
 export async function requestProviderText(
   { apiKey, model, baseUrl, timeoutMs }: ProviderConfig,
-  input: string,
+  request: string | ProviderTextRequest,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
+  const instructions = typeof request === "string" ? undefined : request.instructions;
+  const input = typeof request === "string" ? request : request.input;
   let signal: AbortSignal | undefined;
   try {
     signal = AbortSignal.timeout(timeoutMs);
@@ -36,7 +43,12 @@ export async function requestProviderText(
     const response = await fetchImpl(url.href, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, input, stream: false }),
+      body: JSON.stringify({
+        model,
+        input,
+        stream: false,
+        ...(instructions ? { instructions } : {}),
+      }),
       redirect: "error",
       signal,
     });

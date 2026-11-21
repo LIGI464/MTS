@@ -38,10 +38,16 @@ export const AssistantChatContextSchema = z.strictObject({
   symptoms: boundedText(2_000).optional(),
 });
 
+export const AssistantChatHistoryEntrySchema = z.strictObject({
+  role: z.enum(["user", "assistant"]),
+  text: z.string().min(1).max(2_000),
+});
+
 export const AssistantChatRequestSchema = z.strictObject({
   mode: AssistantChatModeSchema,
   question: trimmedQuestion.optional().default(""),
   context: AssistantChatContextSchema.optional().default({}),
+  history: z.array(AssistantChatHistoryEntrySchema).max(20).optional().default([]),
 });
 
 export const AssistantChatResponseSchema = z.strictObject({
@@ -56,6 +62,7 @@ export const AssistantChatResponseSchema = z.strictObject({
   matches: z.array(AssistantSimilarIncidentSchema).max(5),
 });
 
+export type AssistantChatHistoryEntry = z.infer<typeof AssistantChatHistoryEntrySchema>;
 export type AssistantChatMode = z.infer<typeof AssistantChatModeSchema>;
 export type AssistantSearchStatus = z.infer<typeof AssistantSearchStatusSchema>;
 export type AssistantSimilarIncident = z.infer<typeof AssistantSimilarIncidentSchema>;
