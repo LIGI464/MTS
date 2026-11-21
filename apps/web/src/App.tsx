@@ -10,7 +10,8 @@ import { Icon } from "./icons";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
-import { DEFAULT_FILTERS, summarizeQueues, type QueueFilters } from "./operations/queue-summary";
+import { buildQueues, DEFAULT_FILTERS, queueId, SUMMARY_SEGMENTS, PRIMARY_QUEUES,
+  type QueueCategory, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
 import type { useIncidentAlerts } from "./operations/use-incident-alerts";
 import type { useIncidentSound } from "./operations/use-incident-sound";
@@ -21,6 +22,8 @@ import { EventsButton } from "./shell/events-button";
 const STEPS: Array<[DemoStep, string]> = [
   ["critical", "Критический"], ["assign", "Имитировать обновление ITSM"], ["deadline", "Срок"], ["resolve", "Решение"],
 ];
+const EMPTY_GROUPS = { critical: [], coordinator: [] };
+const COUNT_NOTE = "Сводка показывает общий состав рабочих очередей. Счётчики ниже учитывают фильтры.";
 
 export function App({ dashboard, operatorToken, activity, sound }: {
   dashboard: ReturnType<typeof useDashboard>;
@@ -33,10 +36,14 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
+  const groups = snapshot?.groups ?? EMPTY_GROUPS;
+  const coordinatorIds = useMemo(() => new Set(groups.coordinator), [groups.coordinator]);
   const selected = incidents.find(({ id }) => id === selection);
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
-  const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, dashboard.incidentClient, snapshot?.revision);
-  const summary = summarizeQueues(incidents, dashboard.nowMs);
+  const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, coordinatorIds, dashboard.incidentClient, snapshot?.revision);
+  const summary = buildQueues(incidents, groups, dashboard.nowMs);
+  const queues = buildQueues(filtered.incidents, groups, dashboard.nowMs, filters.status !== "default" && filters.status !== "active");
+  const countsDiffer = [...PRIMARY_QUEUES, ...SUMMARY_SEGMENTS].some((category) => summary[category].length !== queues[category].length);
   const { events, highlight, unreadCount, markRead } = activity;
   const resetSeq = dashboard.newNotices.findLast((notice) => notice.kind === "demo.reset")?.seq;
 
@@ -60,6 +67,13 @@ export function App({ dashboard, operatorToken, activity, sound }: {
 
   function changeFilters(patch: Partial<QueueFilters>) {
     setFilters((previous) => ({ ...previous, ...patch }));
+  }
+
+  function jumpToQueue(category: QueueCategory) {
+    const target = document.getElementById(queueId(category));
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "start", behavior: reducedMotion ? "instant" : "smooth" });
   }
 
   return (
@@ -110,8 +124,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       {!snapshot && dashboard.connection !== "connecting" ? <p className="empty-screen">Нет данных</p> : null}
       {snapshot ? (
         <>
-          <DashboardMetrics summary={summary} filters={filters} onChange={changeFilters} />
-          <IncidentFilters filters={filters} incidents={incidents} coordinators={directory.data ?? []} onChange={changeFilters} />
+          <DashboardMetrics queues={summary} onJump={jumpToQueue} />
           <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
             <div className={operationsStyles.queueHeader}>
               <h2 id="queue-heading">Очереди инцидентов</h2>
@@ -119,13 +132,15 @@ export function App({ dashboard, operatorToken, activity, sound }: {
                 {filtered.loading ? "Проверяем поля заявок…" : `Показано ${filtered.incidents.length} из ${incidents.length}`}
               </p>
             </div>
+            <IncidentFilters filters={filters} incidents={incidents} coordinators={directory.data ?? []} onChange={changeFilters} />
+            <p id="queue-count-note" className={countsDiffer ? operationsStyles.countNote : "sr-only"}>{COUNT_NOTE}</p>
             {filtered.failures > 0 ? (
               <p className="banner" role="alert">
                 Не удалось проверить поля заявок ({filtered.failures}).{" "}
                 <button type="button" onClick={filtered.retry}>Повторить</button>
               </p>
             ) : null}
-            <IncidentBoard incidents={filtered.incidents} nowMs={dashboard.nowMs} highlight={highlight}
+            <IncidentBoard queues={queues} nowMs={dashboard.nowMs} highlight={highlight}
               onInspect={select} />
           </section>
         </>

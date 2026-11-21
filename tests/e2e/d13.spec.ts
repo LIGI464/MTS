@@ -3,8 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { readLive, startDashboard, writeLive } from "./support/harness.js";
 
 const ID = "INC000000000001";
-const card = (page: Page, id = ID) => page.locator(`[data-incident-id="${id}"]`);
-const count = (page: Page) => page.locator("[data-incident-id]");
+const priorityQueues = (page: Page) => page.locator("#queue-critical, #queue-high, #queue-medium, #queue-low");
+const card = (page: Page, id = ID) => priorityQueues(page).locator(`[data-incident-id="${id}"]`);
+const count = (page: Page) => priorityQueues(page).locator("[data-incident-id]");
 
 test("D13 показывает 24/44, сочетает фильтры и помещает приоритет 4 в одну очередь", async ({ page }) => {
   await page.goto("/admin/incidents");
@@ -23,13 +24,13 @@ test("D13 показывает 24/44, сочетает фильтры и пом�
   const search = page.getByRole("searchbox", { name: "Поиск инцидентов" });
   await search.fill("АВТОРИЗАЦИЯ");
   await expect(card(page)).toBeVisible();
+  await page.getByRole("button", { name: "Фильтры", exact: true }).click();
   await page.getByRole("button", { name: "У координатора", exact: true }).click();
   await expect(card(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Без координатора", exact: true }).click();
   await expect(card(page)).toBeVisible();
 
   await reset.click();
-  await page.getByRole("button", { name: "Фильтры", exact: true }).click();
   await page.getByRole("combobox", { name: "Дубли", exact: true }).selectOption("yes");
   await expect(count(page)).toHaveCount(2);
   await page.getByRole("combobox", { name: "Устранение последствий", exact: true }).selectOption("yes");

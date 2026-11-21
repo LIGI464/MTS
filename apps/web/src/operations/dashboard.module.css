@@ -28,54 +28,130 @@
   color: var(--critical);
 }
 
-.metrics {
+.summary,
+.summaryMain {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: var(--space-section);
 }
 
-.metric {
-  display: flex;
+.summaryMain {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.summaryCard,
+.summarySegment {
+  position: relative;
   min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 9px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-section);
+  border: 0;
   background: var(--surface);
   color: var(--text);
   text-align: left;
-}
-
-button.metric {
   cursor: pointer;
-  transition: border-color var(--motion) ease, background-color var(--motion) ease;
 }
 
-button.metric:hover {
-  border-color: #a9b2be;
+.summaryCard {
+  min-height: 154px;
+  padding: 18px 66px 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-section);
+  transition: border-color var(--motion) ease, box-shadow var(--motion) ease;
 }
 
-.metric[aria-pressed="true"] {
-  border-color: var(--button);
-  background: #fff7f8;
+.summaryCard:hover { border-color: var(--muted); }
+.summaryCard[data-category="critical"][data-unread="true"] {
+  border-color: var(--brand);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--brand) 32%, transparent);
 }
 
-.metricText {
+.summaryLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.summaryLabel > span {
   display: grid;
-  gap: 5px;
+  flex: none;
+  place-items: center;
   color: var(--muted);
-  font-size: 14px;
 }
 
-.metricText strong {
+.summaryCard .summaryLabel {
+  gap: 12px;
+  font-size: clamp(17px, 2vw, 23px);
+}
+
+.summaryCard .summaryLabel > span,
+.summaryArrow {
+  width: 42px;
+  height: 42px;
+  background: var(--canvas);
+  border-radius: var(--radius-button);
+}
+
+.summaryArrow {
+  position: absolute;
+  inset-inline-end: 22px;
+  bottom: 20px;
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+.summaryCard strong,
+.summarySegment strong {
+  display: block;
+  margin-top: 5px;
   font-family: var(--font-display);
-  font-size: clamp(24px, 3.3vw, 34px);
+  font-size: clamp(36px, 4vw, 49px);
   font-weight: 500;
   line-height: 1.05;
-  color: var(--text);
+}
+
+.summaryStrip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-section);
+  background: var(--surface);
+}
+
+.summarySegment {
+  padding: 18px 24px 20px 16px;
+  border-radius: var(--radius-card);
+}
+
+.summarySegment:hover {
+  background: var(--canvas);
+}
+
+.summarySegment .summaryLabel {
+  min-height: 2.35em;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.summarySegment strong {
+  margin-top: 0;
+  font-size: 34px;
+}
+
+.summarySegment + .summarySegment::before {
+  position: absolute;
+  inset-block: 15px;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--line);
+  transform: skew(-15deg);
+  pointer-events: none;
+  content: "";
 }
 
 .symbol {
@@ -212,7 +288,7 @@ button.metric:hover {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px 12px;
-  margin: 22px 0 10px;
+  margin: 42px 0 16px;
 }
 
 .queueHeader h2 {
@@ -222,6 +298,7 @@ button.metric:hover {
 }
 
 .queueHeader p,
+.countNote,
 .eventDescription,
 .empty,
 .eventTop time,
@@ -234,17 +311,23 @@ button.metric:hover {
 .filters {
   display: grid;
   gap: 10px;
-  padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-section);
-  background: var(--surface);
+  margin-bottom: 16px;
 }
 
 .filterMain {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(155px, 205px) auto auto;
+  display: flex;
   gap: 8px;
 }
+
+.filterMain .search { flex: 1 1 auto; }
+.filterMain .field { flex: 0 1 195px; }
+.filterMain > button { white-space: nowrap; }
+
+.filterMain .search,
+.filterMain select,
+.filterMain > button { min-height: 44px; }
+
+.countNote { margin: -6px 0 12px; }
 
 .field {
   position: relative;
@@ -285,6 +368,8 @@ button.metric:hover {
   mask: url("bootstrap-icons/icons/chevron-down.svg") center / contain no-repeat;
 }
 
+.filterMain .field::after { bottom: calc(50% - 6px); }
+
 .search {
   display: flex;
   align-items: center;
@@ -310,6 +395,7 @@ button.metric:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  margin-bottom: 10px;
 }
 
 .quick button { min-height: 32px; font-size: 13px; }
@@ -327,12 +413,35 @@ button.metric:hover {
 .eventFilter { margin: 20px 0 12px; }
 .empty { padding: 14px 0; }
 
+@media (min-width: 921px) {
+  .summarySegment .summaryLabel { min-height: 1.5em; }
+}
+
+@media (max-width: 920px) {
+  .summaryStrip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .summarySegment:nth-child(4)::before { display: none; }
+}
+
 @media (max-width: 620px) {
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
-  .metric { padding: 10px 12px; border-radius: var(--radius-card); }
-  .metricText { font-size: 13px; }
-  .filterMain { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .search { grid-column: 1 / -1; }
+  .summaryMain { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .summaryCard { min-height: 104px; padding: 12px 58px 12px 14px; }
+  .summaryCard .summaryLabel > span { width: 33px; height: 33px; }
+  .summaryCard strong { font-size: 34px; }
+  .summaryArrow { inset-inline-end: 15px; bottom: 14px; }
+  .summaryStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summarySegment { padding: 10px 18px 10px 9px; }
+  .summarySegment .summaryLabel { font-size: 14px; }
+  .summarySegment strong { font-size: 25px; }
+  .summarySegment:nth-child(n)::before { display: none; }
+  .summarySegment:nth-child(even)::before { display: block; }
+  .summarySegment:nth-child(n + 3) { border-top: 1px solid var(--line); border-radius: 0; }
+  .summarySegment:last-child {
+    grid-column: 1 / -1;
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
+  }
+  .queueHeader { margin-top: 24px; }
+  .filterMain { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .filterMain .search { grid-column: 1 / -1; }
   .filterMain > button { padding-inline: 7px; }
   .filterMain select { font-size: 13px; }
   .filterMain > button svg { display: none; }

@@ -80,7 +80,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) 
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Загрузить JSON" })).toBeFocused();
     await returnToBoard(page);
-    await expect(page.locator("[data-incident-id]").filter({ hasText: importedTitle })).toHaveCount(1);
+    await expect(page.locator("#queue-critical [data-incident-id]").filter({ hasText: importedTitle })).toHaveCount(1);
     await page.getByRole("button", { name: /^События/ }).click();
     await expect(page.getByRole("dialog", { name: "События" }).getByRole("button", { name: importedTitle })).toBeVisible();
     expect(fixture.applyRequests).toHaveLength(1);

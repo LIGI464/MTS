@@ -38,10 +38,13 @@ test("D11 показывает пульт, навигацию проекта и 
 
   for (const name of GROUPS) {
     const region = page.getByRole("region", { name, exact: true });
+    await region.getByRole("heading", { name, exact: true }).scrollIntoViewIfNeeded();
     await expect(region.getByRole("heading", { name, exact: true })).toBeInViewport();
     if (name === "Критические" || name === "Низкий приоритет") {
+      await region.getByText("Нет инцидентов").scrollIntoViewIfNeeded();
       await expect(region.getByText("Нет инцидентов")).toBeInViewport();
     } else {
+      await region.locator("article").first().scrollIntoViewIfNeeded();
       await expect(region.locator("article").first()).toBeInViewport();
     }
   }

@@ -2,7 +2,7 @@ import { COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { applyDemoStep, openService, OPERATOR_TOKEN, readLive, removeLive, returnToBoard, startDashboard, writeLive, type RunningApp } from "./support/harness.js";
 
-const GROUPS = ["Критические", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
+const GROUPS = ["Критические", "У координаторов", "Сроки", "Высокий приоритет", "Средний приоритет", "Низкий приоритет"] as const;
 const HIGH_ID = "INC000000000001";
 const OTHER_ID = "INC000000000002";
 const RESEARCH_ID = "INC000000000004";
@@ -46,12 +46,13 @@ async function updateCoordinatorTeam(app: RunningApp) {
     : row)));
 }
 
-test("A1 показывает четыре группы и обе точки входа", async ({ page }) => {
+test("A1 показывает шесть блоков очередей и обе точки входа", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app, "/");
   await openDashboard(page, app, "/admin/incidents");
 
   for (const name of GROUPS) {
+    await group(page, name).getByRole("heading", { name, exact: true }).scrollIntoViewIfNeeded();
     await expect(group(page, name).getByRole("heading", { name, exact: true })).toBeInViewport();
   }
 
@@ -65,14 +66,17 @@ test("A1 показывает четыре группы и обе точки в�
   await expect(incident.getByText("В сроке")).toBeVisible();
 });
 
-test("A2 показывает Research по фильтру в одной очереди", async ({ page }) => {
+test("A2 показывает Research у координаторов по умолчанию и в приоритетах по фильтру", async ({ page }) => {
   const app = await openApp();
   await openDashboard(page, app);
-  await expect(page.locator(`[data-incident-id="${RESEARCH_ID}"]`)).toHaveCount(0);
+  await expect(card(page, "У координаторов", RESEARCH_ID)).toHaveCount(1);
+  await expect(card(page, "Средний приоритет", RESEARCH_ID)).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Статус", exact: true }).selectOption("active");
+  await expect(card(page, "У координаторов", RESEARCH_ID)).toHaveCount(0);
   await page.getByRole("combobox", { name: "Статус", exact: true }).selectOption("Research");
   const research = card(page, "Средний приоритет", RESEARCH_ID);
   await expect(research).toBeVisible();
-  await expect(page.locator(`[data-incident-id="${RESEARCH_ID}"]`)).toHaveCount(1);
+  await expect(card(page, "У координаторов", RESEARCH_ID)).toHaveCount(1);
   await expect(research.getByText("Каталог услуг")).toBeVisible();
   await expect(research.getByText(/Решён · исследование/)).toBeVisible();
   await expect(research.locator("[title='Срок не задан']")).toBeVisible();
@@ -90,7 +94,7 @@ test("A3–A6 и A11 проводят сценарии, обновление ITS
 
   await updateCoordinatorTeam(app);
   await expect(critical.getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
-  await expect(page.locator(`[data-incident-id="${HIGH_ID}"]`)).toHaveCount(1);
+  await expect(card(page, "У координаторов", HIGH_ID)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
   await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
 

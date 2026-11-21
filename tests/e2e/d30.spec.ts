@@ -20,8 +20,9 @@ const coordinatorDirectory = [
   { id: "irina", name: "Ирина Волкова" },
   { id: "maksim", name: "Максим Орлов" },
 ];
-const cards = (page: Page) => page.locator("[data-incident-id]");
-const card = (page: Page, id: string) => page.locator(`[data-incident-id=${JSON.stringify(id)}]`);
+const priorityQueues = (page: Page) => page.locator("#queue-critical, #queue-high, #queue-medium, #queue-low");
+const cards = (page: Page) => priorityQueues(page).locator("[data-incident-id]");
+const card = (page: Page, id: string) => priorityQueues(page).locator(`[data-incident-id=${JSON.stringify(id)}]`);
 const ticketPath = (id: string) => `${listing}/${encodeURIComponent(id)}`;
 
 test("D30 обслуживает прямые маршруты и 24/44 записи в живом Fastify", async ({ page }, testInfo) => {
@@ -122,7 +123,7 @@ test("D30 проводит сценарии разработчика, чтени
     await expect(actions.getByRole("status").getByText(`Запись подтверждена. ID ${id}.`)).toBeVisible();
     await expect(actions.getByRole("combobox", { name: "Активная заявка" })).toHaveValue(id);
     for (const board of [left, right]) {
-      await expect(board.getByRole("region", { name: "Критические", exact: true }).locator(card(board, id))).toHaveCount(1);
+      await expect(board.locator("#queue-critical").locator(`[data-incident-id="${id}"]`)).toHaveCount(1);
       await expect(card(board, id)).toHaveCount(1);
       await expect(board.getByRole("button", { name: "События, новых: 1" })).toBeVisible();
     }
@@ -140,7 +141,7 @@ test("D30 проводит сценарии разработчика, чтени
 
     await actions.getByRole("combobox", { name: "Активная заявка" }).selectOption(ids.first);
     await runScenario(actions, "Повысить приоритет", "escalate");
-    await expect(right.getByRole("region", { name: "Критические", exact: true }).locator(card(right, ids.first))).toHaveCount(1);
+    await expect(right.locator("#queue-critical").locator(`[data-incident-id="${ids.first}"]`)).toHaveCount(1);
     await actions.screenshot({ path: testInfo.outputPath("developers-1440x900.png"), animations: "disabled" });
 
     const putCoordinator = async (name: string) => {
@@ -166,8 +167,8 @@ test("D30 проводит сценарии разработчика, чтени
     );
     await left.keyboard.press("Escape");
     await expect(inspect).toBeFocused();
-    await right.getByRole("button", { name: "У координатора", exact: true }).click();
     await right.getByRole("button", { name: "Фильтры", exact: true }).click();
+    await right.getByRole("button", { name: "У координатора", exact: true }).click();
     const coordinatorFilter = right.getByRole("combobox", { name: "Координатор", exact: true });
     await coordinatorFilter.selectOption("maksim");
     await expect(cards(right)).toHaveCount(1);
@@ -296,7 +297,7 @@ test("D30 импортирует через живой D24 после конфл
     await left.keyboard.press("Escape");
     await returnToBoard(left);
     for (const board of [left, right]) {
-      await expect(board.getByRole("region", { name: "Критические", exact: true }).locator(card(board, added.id))).toHaveCount(1);
+      await expect(board.locator("#queue-critical").locator(`[data-incident-id="${added.id}"]`)).toHaveCount(1);
       await expect(card(board, ids.first).getByText("Обновлено импортом D30")).toBeVisible();
     }
     expect(await readLive(app.dataDir)).toBe(validText);

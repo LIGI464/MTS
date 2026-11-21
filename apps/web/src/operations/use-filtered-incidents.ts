@@ -7,10 +7,11 @@ export function useFilteredIncidents(
   incidents: readonly Incident[],
   filters: QueueFilters,
   nowMs: number,
+  coordinatorIds: ReadonlySet<string>,
   client: IncidentClient,
   revision?: number,
 ) {
-  const candidates = filterIncidents(incidents, filters, nowMs);
+  const candidates = filterIncidents(incidents, filters, nowMs, coordinatorIds);
   const needsDetails = needsRawFields(filters);
   const results = useQueries({
     queries: needsDetails ? candidates.map(({ id, version }) => detailQuery(client, id, version, revision)) : [],

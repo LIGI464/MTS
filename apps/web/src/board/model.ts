@@ -19,7 +19,7 @@ export function priorityQueues(incidents: readonly Incident[]): Record<Priority,
   return queues;
 }
 
-function compareIncidents(left: Incident, right: Incident): number {
+export function compareIncidents(left: Incident, right: Incident): number {
   if (left.dueAt !== right.dueAt) {
     if (left.dueAt === null) return 1;
     if (right.dueAt === null) return -1;

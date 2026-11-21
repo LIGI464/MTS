@@ -1,4 +1,6 @@
+import { COORDINATOR_TEAM, type RawIncidentFields } from "@mts/contracts";
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { readLive, startDashboard, writeLive } from "./support/harness.js";
 
 test("лента и звук реагируют на новый инцидент один раз, в том числе после восстановления связи", async ({ page }, testInfo) => {
@@ -80,17 +82,101 @@ test("лента и звук реагируют на новый инцидент
   }
 });
 
-test("показатели сводки фильтруют очереди и возвращают полный список", async ({ page }) => {
-  await page.goto("/admin/incidents");
-  const summary = page.getByRole("group", { name: "Сводка инцидентов" });
-  const high = page.getByRole("region", { name: "Высокий приоритет", exact: true });
-  await expect(high.locator("article")).toHaveCount(5);
-  const picker = summary.getByRole("button", { name: /Критические/ });
-  await picker.click();
-  await expect(picker).toHaveAttribute("aria-pressed", "true");
-  await expect(high.getByText("Нет инцидентов")).toBeVisible();
-  await page.getByRole("button", { name: "Сбросить", exact: true }).click();
-  await expect(high.locator("article")).toHaveCount(5);
+test("D20 показывает пустую сводку, два ряда и обе секции сроков", async ({ page }) => {
+  const app = await startDashboard("rules", "", { incidents: [] });
+  try {
+    await page.goto(`${app.url}/admin/incidents`);
+    await expect(page.getByText("Данные актуальны")).toBeVisible();
+    const summary = page.getByRole("group", { name: "Сводка инцидентов" });
+    await expect(summary.getByRole("button")).toHaveText([
+      "Критические0", "У координаторов0", "Срок близко0", "Просрочены0",
+      "Высокий приоритет0", "Средний приоритет0", "Низкий приоритет0",
+    ]);
+    const strip = await summary.locator("[aria-controls='queue-near']").evaluate((button) => {
+      const panel = button.parentElement!;
+      return {
+        border: getComputedStyle(panel).borderTopWidth,
+        dividers: Array.from(panel.children).filter((item) => getComputedStyle(item, "::before").transform !== "none").length,
+      };
+    });
+    expect(strip).toEqual({ border: "1px", dividers: 4 });
+
+    const ids = ["critical", "coordinator", "deadlines", "high", "medium", "low"];
+    const groups = page.locator(ids.map((id) => `#queue-${id}`).join(", "));
+    await expect(page.getByRole("region", { name: "Сроки", exact: true }).getByText("Нет инцидентов")).toHaveCount(2);
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+      await expect(summary).toBeInViewport();
+      const layout = await groups.evaluateAll((items) => items.map((item) => {
+        const { x, y } = item.getBoundingClientRect();
+        return { id: item.id, x, y };
+      }));
+      expect(layout.map(({ id }) => id)).toEqual(ids.map((id) => `queue-${id}`));
+      if (viewport.width >= 1280) {
+        expect(layout.slice(0, 3).map(({ y }) => y)).toEqual(Array(3).fill(layout[0].y));
+        expect(layout.slice(3).map(({ x }) => x)).toEqual(layout.slice(0, 3).map(({ x }) => x));
+        expect(layout.slice(3).map(({ y }) => y)).toEqual(Array(3).fill(layout[3].y));
+        expect(layout[3].y).toBeGreaterThan(layout[0].y);
+      } else {
+        expect(new Set(layout.map(({ x }) => x)).size).toBe(1);
+        expect(layout.map(({ y }) => y)).toEqual(layout.map(({ y }) => y).toSorted((a, b) => a - b));
+      }
+    }
+  } finally {
+    await app.stop();
+  }
+});
+
+test("D20 ведёт к точной секции SLA и пересчитывает её отдельно от приоритета", async ({ page }) => {
+  const demo: RawIncidentFields[] = JSON.parse(await readFile("data/demo/character_problems.json", "utf8"));
+  const now = Date.now();
+  const near = { ...demo[0], assignedGroupName: COORDINATOR_TEAM, deadline: new Date(now + 240_000).toISOString() };
+  const overdue = { ...demo[1], deadline: new Date(now - 240_000).toISOString() };
+  const research = demo.find(({ stateEnum }) => stateEnum === "Research")!;
+  const app = await startDashboard("rules", "", { incidents: [near, overdue, research] });
+  try {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.install({ time: now });
+    await page.goto(`${app.url}/admin/incidents`);
+    const summary = page.getByRole("group", { name: "Сводка инцидентов" });
+    const deadline = (kind: "near" | "overdue") => page.locator(`#queue-${kind}`);
+    const sameId = `[data-incident-id=${JSON.stringify(near.id)}]`;
+    await expect(deadline("near").locator(sameId)).toHaveCount(1);
+    await expect(deadline("overdue").locator(sameId)).toHaveCount(0);
+    await expect(page.locator("#queue-high").locator(sameId)).toHaveCount(1);
+    await expect(page.locator("#queue-coordinator").locator(`[data-incident-id=${JSON.stringify(research.id)}]`)).toHaveCount(1);
+    await expect(page.locator("#queue-medium").locator(`[data-incident-id=${JSON.stringify(research.id)}]`)).toHaveCount(0);
+
+    const nearButton = summary.getByRole("button", { name: /Срок близко/ });
+    const overdueButton = summary.getByRole("button", { name: /Просрочены/ });
+    await nearButton.focus();
+    await page.keyboard.press("Enter");
+    await expect(deadline("near")).toBeFocused();
+    await expect(deadline("near").getByRole("heading")).toBeInViewport();
+    await overdueButton.click();
+    await expect(deadline("overdue")).toBeFocused();
+    await expect(deadline("overdue").getByRole("heading")).toBeInViewport();
+
+    const search = page.getByRole("searchbox", { name: "Поиск инцидентов" });
+    await search.fill(String(overdue.id));
+    await expect(nearButton).toHaveText("Срок близко1");
+    await expect(deadline("near").getByText("Нет инцидентов")).toBeVisible();
+    await expect(page.locator("#queue-count-note")).toBeVisible();
+    await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+    await expect(deadline("near").locator(sameId)).toHaveCount(1);
+
+    await page.clock.fastForward(300_000);
+    await expect(nearButton).toHaveText("Срок близко0");
+    await expect(overdueButton).toHaveText("Просрочены2");
+    await expect(deadline("near").locator(sameId)).toHaveCount(0);
+    await expect(deadline("overdue").locator(sameId)).toHaveCount(1);
+    await expect(page.locator("#queue-high").locator(sameId)).toHaveCount(1);
+    await overdueButton.click();
+    await expect(deadline("overdue")).toBeFocused();
+  } finally {
+    await app.stop();
+  }
 });
 
 test("события можно закрепить, отфильтровать и открепить после перезагрузки", async ({ page }) => {

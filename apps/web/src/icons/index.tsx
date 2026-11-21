@@ -1,12 +1,15 @@
 import activity from "bootstrap-icons/icons/activity.svg?raw";
 import alarm from "bootstrap-icons/icons/alarm.svg?raw";
 import arrowCounterclockwise from "bootstrap-icons/icons/arrow-counterclockwise.svg?raw";
+import arrowDown from "bootstrap-icons/icons/arrow-down.svg?raw";
 import arrowLeft from "bootstrap-icons/icons/arrow-left.svg?raw";
 import arrowRight from "bootstrap-icons/icons/arrow-right.svg?raw";
 import bell from "bootstrap-icons/icons/bell.svg?raw";
 import bellSlash from "bootstrap-icons/icons/bell-slash.svg?raw";
 import boxArrowUpRight from "bootstrap-icons/icons/box-arrow-up-right.svg?raw";
 import checkCircle from "bootstrap-icons/icons/check-circle.svg?raw";
+import chevronDoubleUp from "bootstrap-icons/icons/chevron-double-up.svg?raw";
+import chevronDown from "bootstrap-icons/icons/chevron-down.svg?raw";
 import clipboardData from "bootstrap-icons/icons/clipboard-data.svg?raw";
 import clockHistory from "bootstrap-icons/icons/clock-history.svg?raw";
 import clock from "bootstrap-icons/icons/clock.svg?raw";
@@ -33,12 +36,15 @@ const icons = {
   activity,
   alarm,
   "arrow-counterclockwise": arrowCounterclockwise,
+  "arrow-down": arrowDown,
   "arrow-left": arrowLeft,
   "arrow-right": arrowRight,
   bell,
   "bell-slash": bellSlash,
   "box-arrow-up-right": boxArrowUpRight,
   "check-circle": checkCircle,
+  "chevron-double-up": chevronDoubleUp,
+  "chevron-down": chevronDown,
   "clipboard-data": clipboardData,
   clock,
   "clock-history": clockHistory,
