@@ -92,6 +92,7 @@ export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: C
   const completedSearchTickets = database.prepare(`
     ${searchProjection} WHERE json_extract(h.ticket, '$.state') IN ('Resolved', 'Closed')
   `);
+  const allSearchTickets = database.prepare(`${searchProjection} ORDER BY i.id`);
   const historyRows = database.prepare(`
     SELECT version, at, present, raw, ticket FROM itsm_history
     WHERE incident_id = ? ORDER BY seq DESC
@@ -152,6 +153,9 @@ export function prepareItsmArchive(database: DatabaseSync, projectCoordinator: C
     },
     *completedSearchTickets(): IterableIterator<ArchiveMatchTicket> {
       for (const row of completedSearchTickets.iterate() as Iterable<SearchRow>) yield readSearchTicket(row);
+    },
+    *allSearchTickets(): IterableIterator<ArchiveMatchTicket> {
+      for (const row of allSearchTickets.iterate() as Iterable<SearchRow>) yield readSearchTicket(row);
     },
     getVersion(id: string): { version: string; present: boolean } | null {
       const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;

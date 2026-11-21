@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { createAssistantResponder, type AssistantResponder } from "@mts/analysis";
+import { ASSISTANT_PROMPT_VERSION, createAssistantResponder, type AssistantResponder } from "@mts/analysis";
 import {
   API_PREFIX,
   AssistantChatRequestSchema,
@@ -41,7 +41,7 @@ export function registerAssistantRoutes(
   context: RouteContext,
   makeResponder: typeof createAssistantResponder = createAssistantResponder,
 ): void {
-  const { runtime, env, operatorToken } = context;
+  const { runtime, env, operatorToken, dataDir } = context;
   const liveEnabled = liveAnalysisEnabled(env, operatorToken);
   const responder: AssistantResponder = makeResponder({
     apiKey: env.CODEX_SALE_API_KEY?.trim() || undefined,
@@ -97,16 +97,34 @@ export function registerAssistantRoutes(
 
     const useLive = liveEnabled && authorized;
     const snapshot = runtime.getSnapshot();
-    const resolved = resolveAssistantQuery(runtime, parsed.data);
+    const resolved = resolveAssistantQuery(runtime, parsed.data, {
+      dataDir,
+      revision: snapshot.revision,
+      snapshot,
+    });
     const matches = toMatches(resolved.search);
     const prepared = responder.prepare({
       mode: parsed.data.mode,
       question: parsed.data.question,
+      history: parsed.data.history,
       context: resolved.context,
       incident: resolved.incident,
       description: resolved.description,
       searchStatus: resolved.searchStatus,
       matches,
+      activeSimilar: resolved.activeSimilar.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        state: entry.state,
+        reason: entry.reason,
+        href: entry.href,
+      })),
+      coverage: resolved.coverage,
+      compareWith: resolved.compareWith,
+      compareDescription: resolved.compareDescription,
+      compareNotFound: resolved.compareNotFound,
+      dashboardFacts: resolved.dashboardFacts,
+      useComparisonPrompt: resolved.useComparisonPrompt,
       now: snapshot.serverNow,
     });
 
@@ -115,6 +133,8 @@ export function registerAssistantRoutes(
       parsed.data.mode,
       resolved.context,
       parsed.data.question,
+      parsed.data.history,
+      ASSISTANT_PROMPT_VERSION,
       useLive,
       prepared.key,
     ]);

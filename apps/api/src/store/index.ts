@@ -32,6 +32,7 @@ export type DashboardStore = {
   getTicket: ReturnType<typeof prepareItsmArchive>["getTicket"];
   getSearchTicket: ReturnType<typeof prepareItsmArchive>["getSearchTicket"];
   completedSearchTickets: ReturnType<typeof prepareItsmArchive>["completedSearchTickets"];
+  allSearchTickets: ReturnType<typeof prepareItsmArchive>["allSearchTickets"];
   getTicketVersion: ReturnType<typeof prepareItsmArchive>["getVersion"];
   getPresentFingerprints: ReturnType<typeof prepareItsmArchive>["getPresentFingerprints"];
   getPresentRaw: ReturnType<typeof prepareItsmArchive>["getPresentRaw"];
@@ -180,6 +181,7 @@ export function openDashboardStore(path: string, projectCoordinator = createCoor
       getTicket: archive.getTicket,
       getSearchTicket: archive.getSearchTicket,
       completedSearchTickets: archive.completedSearchTickets,
+      allSearchTickets: archive.allSearchTickets,
       getTicketVersion: archive.getVersion,
       getPresentFingerprints: archive.getPresentFingerprints,
       getPresentRaw: archive.getPresentRaw,

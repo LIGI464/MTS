@@ -40,6 +40,7 @@ export {
 } from "./schemas.js";
 export {
   AssistantChatContextSchema,
+  AssistantChatHistoryEntrySchema,
   AssistantChatModeSchema,
   AssistantChatRequestSchema,
   AssistantChatResponseSchema,
@@ -49,6 +50,7 @@ export {
 } from "./assistant.js";
 export type {
   AssistantChatContext,
+  AssistantChatHistoryEntry,
   AssistantChatMode,
   AssistantChatRequest,
   AssistantChatResponse,

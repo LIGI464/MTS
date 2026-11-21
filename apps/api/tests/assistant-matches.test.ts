@@ -65,10 +65,12 @@ it("reads completed archive versions and resolves real links after changes and r
       });
     }, { timeout: 2_000, interval: 10 });
 
-    expect(runtime.findSimilarIncidents({ symptoms: "Найди похожие завершённые инциденты." })).toEqual({ kind: "needs_context" });
-    expect(runtime.findSimilarIncidents({ incidentId: "SYN-D60/unknown", symptoms: "печать этикеток" }))
-      .toEqual({ kind: "incident_not_found" });
-    expect(runtime.findSimilarIncidents({ symptoms: "Не заряжается аккумулятор." })).toEqual({ kind: "no_matches" });
+    expect(runtime.findSimilarIncidents({ symptoms: "Найди похожие завершённые инциденты." }).kind).toBe("needs_context");
+    expect(runtime.findSimilarIncidents({ incidentId: "SYN-D60/unknown", symptoms: "печать этикеток" }).kind)
+      .toBe("incident_not_found");
+    const empty = runtime.findSimilarIncidents({ symptoms: "Не заряжается аккумулятор." });
+    expect(empty.kind).toBe("no_matches");
+    if (empty.kind === "no_matches") expect(empty.coverage.uniqueExamined).toBeGreaterThan(0);
     expect(matches(runtime.findSimilarIncidents({ symptoms: "ЗАВИСАЕТ, печать этикеток!" })).map(({ id }) => id))
       .toEqual([archived.id, closed.id, subject.id]);
 
@@ -108,26 +110,30 @@ it("counts symptoms separately from product names repeated in a title", () => {
     description: null, shortDescription: null, solution: null,
     state: "Assigned", resolvedAt: null, present: true, product: "Бирюзовый каталог", service: null, sysId: null,
   };
-  const archive = {
+  const peers = (): ArchiveMatchTicket[] => [{
+    ...subject, id: "SYN-D60/export", state: "Closed", title: "Бирюзовый каталог: некорректная выгрузка",
+  }];
+  const archiveAll = {
     getSearchTicket: () => subject,
-    completedSearchTickets: (): ArchiveMatchTicket[] => [{
-      ...subject, id: "SYN-D60/export", state: "Closed", title: "Бирюзовый каталог: некорректная выгрузка",
-    }],
+    completedSearchTickets: peers,
+    allSearchTickets: peers,
   };
-  expect(findSimilarIncidents(archive, { incidentId: subject.id }, () => null)).toEqual({ kind: "no_matches" });
-  expect(findSimilarIncidents(archive, { symptoms: "Бирюзовый каталог" }, () => null)).toEqual({ kind: "no_matches" });
-  expect(matches(findSimilarIncidents(archive, { symptoms: "Бирюзовый каталог: выгрузка" }, () => null)))
+  expect(findSimilarIncidents(archiveAll, { incidentId: subject.id }, () => null).kind).toBe("no_matches");
+  expect(findSimilarIncidents(archiveAll, { symptoms: "Бирюзовый каталог" }, () => null).kind).toBe("no_matches");
+  expect(matches(findSimilarIncidents(archiveAll, { symptoms: "Бирюзовый каталог: выгрузка" }, () => null)))
     .toMatchObject([{ id: "SYN-D60/export" }]);
 });
 
 it("distinguishes HTTP status codes when searching by symptoms", () => {
-  const archive = {
-    getSearchTicket: () => null,
-    completedSearchTickets: (): ArchiveMatchTicket[] => [404, 500].map((code) => ({
+  const completed = (): ArchiveMatchTicket[] => [404, 500].map((code) => ({
       id: `SYN-D60/http/${code}`, version: "version", title: `Ошибка HTTP ${code}`,
       description: null, shortDescription: null, solution: null,
       state: "Resolved", resolvedAt: null, present: true, product: null, service: null, sysId: null,
-    })),
+    }));
+  const archive = {
+    getSearchTicket: () => null,
+    completedSearchTickets: completed,
+    allSearchTickets: completed,
   };
   expect(matches(findSimilarIncidents(archive, { symptoms: "http: 500" }, () => null)).map(({ id }) => id))
     .toEqual(["SYN-D60/http/500"]);
@@ -147,9 +153,11 @@ it("ranks the best evidence before truncating and breaks ties by completion date
     ...ticket, id: "SYN-D60/best", state: "Resolved", resolvedAt: "2025-01-01T00:00:00.000Z",
     solution: " ",
   };
+  const corpus = () => [...recent.toReversed(), best];
   const archive = {
     getSearchTicket: () => ticket,
-    completedSearchTickets: () => [...recent.toReversed(), best],
+    completedSearchTickets: corpus,
+    allSearchTickets: corpus,
   };
   const found = matches(findSimilarIncidents(archive, { incidentId: ticket.id }, () => null));
   expect(found.map(({ id }) => id)).toEqual([best.id, recent[2].id, recent[0].id, recent[1].id, recent[3].id]);
