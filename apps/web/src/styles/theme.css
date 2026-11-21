@@ -1,0 +1,210 @@
+/*
+  Самостоятельная тема пульта по визуальному референсу МТС.
+  Это не Granat Web SDK и не официальные токены.
+  Шрифты подключены текущими @font-face с font-display: swap.
+  Если файлы недоступны, остаётся системный шрифт с кириллицей.
+*/
+
+@font-face {
+  font-family: "MTS Compact";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MTS Compact";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MTS Compact";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSCompact/MTSCompact-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MTS Wide";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MTS Wide";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSWide/MTSWide-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MTS Text";
+  src: url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.woff2") format("woff2"),
+    url("https://static.mts.ru/mts_rf/images/fonts/v1/MTSText/MTSText-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --canvas: #f2f3f7;
+  --surface: #ffffff;
+  --ink: #25273a;
+  --text: #1d2023;
+  --muted: #626c77;
+  --brand: #ff0032;
+  --button: #e0002c;
+  --on-button: #ffffff;
+  --on-brand: var(--on-button);
+  --focus: #0065ce;
+  --critical: #a82042;
+  --warning: #8a5a12;
+  --warning-mark: #b7791f;
+  --success: #1f7a4d;
+  --on-ink: #ffffff;
+  --line: #e2e5eb;
+  --radius: 16px;
+  --radius-section: 24px;
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --space-section: 16px;
+  --space-card: 12px;
+  --motion: 140ms;
+  --panel-motion: 200ms;
+  --content-width: 1440px;
+  --critical-soft: #fff0f2;
+  --warning-soft: #fff4db;
+  --success-soft: #e9f8ef;
+  --info: #345186;
+  --info-soft: #eef2fb;
+  --button-hover: #bc0027;
+  --heading-size: 32px;
+  --queue-size: 20px;
+  --incident-size: 16px;
+  --meta-size: 14px;
+  --text-size: 16px;
+  --text-size-compact: var(--meta-size);
+  --font-sans: "MTS Compact", "Segoe UI", system-ui, sans-serif;
+  --font-display: "MTS Wide", "MTS Compact", "Segoe UI", sans-serif;
+  --font-text: "MTS Text", "MTS Compact", "Segoe UI", sans-serif;
+  --bg: var(--canvas);
+  --accent: var(--brand);
+  --amber: var(--warning);
+  --ok: var(--success);
+  color: var(--text);
+  background: var(--canvas);
+  font-family: var(--font-sans);
+  font-size: var(--text-size);
+}
+
+[data-surface="canvas"] {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+[data-surface="surface"] {
+  background: var(--surface);
+  color: var(--text);
+}
+
+[data-surface="ink"] {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+[data-numeric="tabular"] {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-surface="canvas"] :focus-visible,
+[data-surface="surface"] :focus-visible,
+[data-surface="ink"] :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+[data-surface="ink"] :focus-visible {
+  outline-color: var(--on-ink);
+}
+
+[data-surface="canvas"] :disabled,
+[data-surface="surface"] :disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+[data-surface="ink"] :disabled {
+  color: var(--on-ink);
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+[data-surface="canvas"] [role="alert"],
+[data-surface="surface"] [role="alert"] {
+  color: var(--critical);
+}
+
+[data-surface="ink"] [role="alert"] {
+  color: var(--on-ink);
+  background: var(--critical);
+}
+
+[data-surface="canvas"] input[aria-invalid="true"],
+[data-surface="surface"] input[aria-invalid="true"],
+[data-surface="ink"] input[aria-invalid="true"] {
+  border-color: var(--critical);
+}
+
+a.brand-action,
+button.brand-action {
+  display: inline-block;
+  background: var(--button);
+  color: var(--on-button);
+  border: 1px solid var(--button);
+  border-radius: var(--radius-button);
+  padding: 4px 8px;
+  font-family: var(--font-sans);
+  font-size: var(--meta-size);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--motion) ease, border-color var(--motion) ease;
+}
+
+a.brand-action:hover,
+button.brand-action:hover,
+a.brand-action:focus-visible,
+button.brand-action:focus-visible {
+  color: var(--on-button);
+}
+
+a.brand-action:active,
+button.brand-action:active {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+a.brand-action:disabled,
+button.brand-action:disabled {
+  color: var(--on-button);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0ms;
+    --panel-motion: 0ms;
+  }
+}

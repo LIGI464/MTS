@@ -1,66 +1,46 @@
-import { getSlaState, type Incident, type Snapshot } from "@mts/contracts";
+import type { Incident } from "@mts/contracts";
+import { ArrowUpRight, Clock, ShieldAlert, Timer, Minus, SignalLow } from "lucide-react";
+import { formatMoscow, presentSla } from "./format";
+import { itsmHref } from "./itsm";
+import { displayText, incidentCoordinator, PRIORITIES, priorityQueues } from "./model";
+import type { IncidentAlert } from "../operations/activity";
+import styles from "./board.module.css";
 
-const GROUPS = [
-  ["critical", "Критические"],
-  ["coordinator", "У координаторов"],
-  ["high", "Высокий приоритет"],
-  ["research", "Исследование"],
-] as const;
+const groupIcons = { 4: ShieldAlert, 3: Timer, 2: Minus, 1: SignalLow };
 
 export function IncidentBoard({
-  snapshot,
+  incidents,
   nowMs,
+  highlight,
   onInspect,
+  onAssign,
 }: {
-  snapshot: Snapshot;
+  incidents: readonly Incident[];
   nowMs: number;
+  highlight?: IncidentAlert | null;
   onInspect: (id: string) => void;
+  onAssign: (id: string) => void;
 }) {
-  const incidents = new Map(snapshot.incidents.map((incident) => [incident.id, incident]));
-
+  const queues = priorityQueues(incidents);
   return (
-    <div className="board">
-      {GROUPS.map(([key, title]) => {
-        const ids = snapshot.groups[key];
+    <div className={styles.board}>
+      {PRIORITIES.map(({ id: key, title, label }) => {
+        const cards = queues[key];
+        const Icon = groupIcons[key];
         return (
-          <section className="group" key={key} aria-label={title}>
-            <h2>
-              {title} · {ids.length}
-            </h2>
-            {ids.length === 0 ? <p className="empty">Нет инцидентов</p> : null}
-            <div className="cards">
-              {ids.map((id) => {
-                const incident = incidents.get(id);
-                if (!incident) return null;
-                return (
-                  <article className={cardClass(incident, nowMs)} key={id}>
-                    <h3>
-                      <button type="button" onClick={() => onInspect(incident.id)}>
-                        {incident.title}
-                      </button>
-                    </h3>
-                    <p>{incident.id}</p>
-                    <p>
-                      {incident.product ?? "Продукт не указан"}
-                      {incident.service ? ` · ${incident.service}` : ""}
-                    </p>
-                    <p className="time" title={moscow(incident.createdAt)}>
-                      {moscow(incident.createdAt)}
-                    </p>
-                    <p>{incident.assignee ?? (incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
-                    <p>{incident.team ?? "Группа не назначена"}</p>
-                    <p>{incident.stateLabel}</p>
-                    <p className="time" title={incident.dueAt ? moscow(incident.dueAt) : undefined}>
-                      {slaText(incident, nowMs)}
-                    </p>
-                    {incident.itsmUrl ? (
-                      <a href={incident.itsmUrl} target="_blank" rel="noopener noreferrer">
-                        В ITSM
-                      </a>
-                    ) : null}
-                  </article>
-                );
-              })}
+          <section className={styles.group} key={key} aria-label={title} data-surface="surface" data-group={key}>
+            <header className={styles.groupHead}>
+              <span className={styles.groupIcon}><Icon size={16} aria-hidden /></span>
+              <h2>{title}</h2>
+              <span className={styles.count} data-numeric="tabular">{cards.length}</span>
+            </header>
+            {cards.length === 0 ? <p className={styles.empty}>Нет инцидентов</p> : null}
+            <div className={styles.cards}>
+              {cards.map((incident) => (
+                <IncidentCard key={incident.id} incident={incident} priorityLabel={label} nowMs={nowMs}
+                  newSequence={highlight?.incidentIds.has(incident.id) ? highlight.sequence : undefined}
+                  onInspect={onInspect} onAssign={onAssign} />
+              ))}
             </div>
           </section>
         );
@@ -69,31 +49,71 @@ export function IncidentBoard({
   );
 }
 
-function cardClass(incident: Incident, nowMs: number): string {
-  const sla = getSlaState(incident, nowMs);
-  if (incident.priority === 4 || sla === "overdue") return "card critical";
-  if (sla === "near") return "card near";
-  return "card";
-}
+function IncidentCard({
+  incident,
+  priorityLabel,
+  nowMs,
+  newSequence,
+  onInspect,
+  onAssign,
+}: {
+  incident: Incident;
+  priorityLabel: string;
+  nowMs: number;
+  newSequence?: number;
+  onInspect: (id: string) => void;
+  onAssign: (id: string) => void;
+}) {
+  const coordinator = incidentCoordinator(incident);
+  const sla = presentSla(incident, nowMs);
+  const tone = sla.tone === "alert" ? styles.alert : sla.tone === "near" ? styles.near : styles.calm;
 
-function slaText(incident: Incident, nowMs: number): string {
-  const sla = getSlaState(incident, nowMs);
-  if (sla === "done" && incident.state === "Research") return "Решён · исследование";
-  if (sla === "done" && incident.state === "Closed") return "Закрыт";
-  if (sla === "done") return "Решён";
-  if (sla === "near") return "Срок близко";
-  if (sla === "overdue") return "Просрочен";
-  if (sla === "unknown") return "Срок не задан";
-  return incident.dueAt ? moscow(incident.dueAt) : "Срок не задан";
-}
-
-function moscow(iso: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
+  return (
+    <article data-incident-id={incident.id} className={`${styles.card} ${tone}`} data-fresh={newSequence !== undefined ? "true" : undefined}>
+      <div className={styles.cardHeading}>
+        <span className={styles.id} data-numeric="tabular">{incident.id}</span>
+        <div className={styles.badges}>
+          <span className={styles.priority}>{priorityLabel}</span>
+          <span className={styles.status}>{incident.stateLabel}</span>
+        </div>
+      </div>
+      <div className={styles.titleRow}>
+        <button type="button" className={styles.title} title={incident.title} onClick={() => onInspect(incident.id)}>
+          {incident.title}
+        </button>
+        {newSequence !== undefined ? <span key={newSequence} className={styles.newLabel}>Новый</span> : null}
+      </div>
+      <p className={styles.product}>
+        {displayText(incident.product, "Продукт не указан")}
+        {" · "}
+        {displayText(incident.service, "Сервис не указан")}
+      </p>
+      <div className={styles.meta}>
+        <p data-numeric="tabular">Регистрация {formatMoscow(incident.createdAt)}</p>
+        <p>{displayText(incident.assignee, incident.team ? "Исполнитель не назначен" : "Назначение не указано")}</p>
+        <p>{displayText(incident.team, "Группа не назначена")}</p>
+        <p className={styles.coordinator}>
+          {coordinator ? `Координатор · ${coordinator.name}` : "Координатор не назначен"}
+        </p>
+      </div>
+      <div className={styles.cardFooter}>
+        <p className={styles.time} data-numeric="tabular" title={sla.hint}>
+          <Clock size={14} aria-hidden />
+          <span>{sla.status}</span>
+          {sla.duration ? <span>{sla.duration}</span> : null}
+        </p>
+        <div className={styles.actions}>
+          <button type="button" className={`${styles.action} ${styles.assignment}`} onClick={() => onAssign(incident.id)}>
+            {coordinator ? "Сменить координатора" : "Назначить координатора"}
+          </button>
+          <a className={`${styles.action} ${styles.primary}`} href={itsmHref(incident)} target="_blank" rel="noopener noreferrer">
+            В ITSM <ArrowUpRight size={14} aria-hidden />
+          </a>
+          <button type="button" className={`${styles.action} ${styles.secondary}`} onClick={() => onInspect(incident.id)}>
+            Подробнее
+          </button>
+        </div>
+      </div>
+    </article>
+  );
 }

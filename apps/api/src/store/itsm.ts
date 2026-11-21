@@ -1,0 +1,168 @@
+import { randomUUID } from "node:crypto";
+import type { DatabaseSync } from "node:sqlite";
+import type { Coordinator, FullTicketDetail, HistoryEntry, RawIncidentFields, TicketList, TicketSummary } from "@mts/contracts";
+import type { SourceRecord } from "../source/input.js";
+
+type StoredTicket = Omit<TicketSummary, "version" | "present">;
+type HistoryRow = {
+  incidentId: string;
+  version: string;
+  at: string;
+  present: 0 | 1;
+  fingerprint: string;
+  raw: string;
+  ticket: string;
+};
+type SummaryRow = Pick<HistoryRow, "version" | "present" | "ticket">;
+
+function displayText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function projectTicket({ incident, raw }: SourceRecord): StoredTicket {
+  const { id, title, product, service, team, assignee, state, stateLabel, priority, createdAt, dueAt, resolvedAt } = incident;
+  return {
+    id, title, product, service, team, assignee, state, stateLabel, priority, createdAt, dueAt, resolvedAt,
+    hasSolution: displayText(raw.solution) !== null,
+    coordinator: incident.coordinator,
+  };
+}
+
+function readSummary(row: SummaryRow): TicketSummary {
+  const ticket = JSON.parse(row.ticket) as StoredTicket;
+  return { ...ticket, version: row.version, present: row.present === 1 };
+}
+
+export function prepareItsmArchive(database: DatabaseSync) {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS itsm_history (
+      seq INTEGER PRIMARY KEY,
+      incident_id TEXT NOT NULL,
+      version TEXT NOT NULL,
+      at TEXT NOT NULL,
+      present INTEGER NOT NULL CHECK (present IN (0, 1)),
+      fingerprint TEXT NOT NULL,
+      raw TEXT NOT NULL,
+      ticket TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS itsm_history_incident ON itsm_history (incident_id, seq DESC);
+    CREATE TABLE IF NOT EXISTS itsm_incidents (
+      id TEXT PRIMARY KEY,
+      latest_seq INTEGER NOT NULL REFERENCES itsm_history (seq)
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS itsm_coordinator_assignments (
+      incident_id TEXT PRIMARY KEY REFERENCES itsm_incidents (id),
+      coordinator_id TEXT NOT NULL,
+      name TEXT NOT NULL
+    ) STRICT;
+  `);
+
+  const currentRows = database.prepare(`
+    SELECT h.version, h.present, h.ticket FROM itsm_incidents i
+    JOIN itsm_history h ON h.seq = i.latest_seq ORDER BY i.id
+  `);
+  const presentRows = database.prepare(`
+    SELECT i.id AS incidentId, h.fingerprint, h.raw, h.ticket FROM itsm_incidents i
+    JOIN itsm_history h ON h.seq = i.latest_seq WHERE h.present = 1 ORDER BY i.id
+  `);
+  const presentFingerprints = database.prepare(`
+    SELECT i.id, h.fingerprint FROM itsm_incidents i
+    JOIN itsm_history h ON h.seq = i.latest_seq WHERE h.present = 1
+  `);
+  const currentVersion = database.prepare(`
+    SELECT h.version, h.present FROM itsm_incidents i JOIN itsm_history h ON h.seq = i.latest_seq WHERE i.id = ?
+  `);
+  const historyRows = database.prepare(`
+    SELECT version, at, present, raw, ticket FROM itsm_history
+    WHERE incident_id = ? ORDER BY seq DESC
+  `);
+  const appendHistory = database.prepare(`
+    INSERT INTO itsm_history (incident_id, version, at, present, fingerprint, raw, ticket)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateCurrent = database.prepare(`
+    INSERT INTO itsm_incidents (id, latest_seq) VALUES (?, ?)
+    ON CONFLICT (id) DO UPDATE SET latest_seq = excluded.latest_seq
+  `);
+  const readAssignments = database.prepare(`
+    SELECT incident_id AS incidentId, coordinator_id AS id, name FROM itsm_coordinator_assignments
+  `);
+  const assign = database.prepare(`
+    INSERT INTO itsm_coordinator_assignments (incident_id, coordinator_id, name) VALUES (?, ?, ?)
+    ON CONFLICT (incident_id) DO UPDATE SET coordinator_id = excluded.coordinator_id, name = excluded.name
+  `);
+
+  type RecordData = Pick<HistoryRow, "incidentId" | "fingerprint" | "raw" | "ticket">;
+
+  function append(record: RecordData, at: string, present: 0 | 1): void {
+    const { incidentId, fingerprint, raw, ticket } = record;
+    const { lastInsertRowid } = appendHistory.run(incidentId, randomUUID(), at, present, fingerprint, raw, ticket);
+    updateCurrent.run(incidentId, lastInsertRowid);
+  }
+
+  return {
+    getPresentFingerprints(): Map<string, string> {
+      const rows = presentFingerprints.all() as { id: string; fingerprint: string }[];
+      return new Map(rows.map(({ id, fingerprint }) => [id, fingerprint]));
+    },
+    listPresentRaw(): RawIncidentFields[] {
+      return (presentRows.all() as RecordData[]).map(({ raw }) => JSON.parse(raw) as RawIncidentFields);
+    },
+    getCoordinatorAssignments(): Map<string, Coordinator> {
+      const rows = readAssignments.all() as (Coordinator & { incidentId: string })[];
+      return new Map(rows.map(({ incidentId, ...coordinator }) => [incidentId, coordinator]));
+    },
+    assignCoordinator(id: string, coordinator: Coordinator): void {
+      assign.run(id, coordinator.id, coordinator.name);
+    },
+    // Called within the same write transaction as the dashboard snapshot.
+    sync(records: readonly SourceRecord[], at: string): boolean {
+      const previous = new Map((presentRows.all() as RecordData[]).map((row) => [row.incidentId, row]));
+      let changed = false;
+      for (const record of records) {
+        const incidentId = record.incident.id;
+        const prior = previous.get(incidentId);
+        previous.delete(incidentId);
+        const ticket = JSON.stringify(projectTicket(record));
+        if (prior?.fingerprint === record.fingerprint && prior.ticket === ticket) continue;
+        append({
+          incidentId,
+          fingerprint: record.fingerprint,
+          raw: JSON.stringify(record.raw),
+          ticket,
+        }, at, 1);
+        changed = true;
+      }
+      for (const missing of previous.values()) append(missing, at, 0);
+      return changed || previous.size > 0;
+    },
+    listTickets(): TicketList {
+      return { items: (currentRows.all() as SummaryRow[]).map(readSummary) };
+    },
+    getVersion(id: string): { version: string; present: boolean } | null {
+      const row = currentVersion.get(id) as Pick<SummaryRow, "version" | "present"> | undefined;
+      return row ? { version: row.version, present: row.present === 1 } : null;
+    },
+    getTicket(id: string): FullTicketDetail | null {
+      const rows = historyRows.all(id) as (SummaryRow & Pick<HistoryRow, "raw" | "at">)[];
+      if (rows.length === 0) return null;
+
+      const tickets = rows.map((row) => {
+        const rawFields = JSON.parse(row.raw) as RawIncidentFields;
+        return {
+          ticket: readSummary(row),
+          at: row.at,
+          description: displayText(rawFields.description),
+          solution: displayText(rawFields.solution),
+          rawFields,
+        };
+      });
+      const [{ ticket, description, solution, rawFields }] = tickets;
+      const history = tickets.map(({ ticket, at, description, solution }): HistoryEntry => {
+        const { version, present, stateLabel, team, coordinator, dueAt, priority } = ticket;
+        return { version, at, present, stateLabel, team, coordinator, dueAt, priority, description, solution };
+      });
+      return { ticket, description, solution, history, rawFields };
+    },
+  };
+}
