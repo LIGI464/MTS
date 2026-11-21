@@ -122,3 +122,6 @@ export function createAnalyzer(config: AnalyzerConfig): Analyzer {
     },
   };
 }
+
+export { createPriorityProvider } from "./priority-provider.js";
+export { ProviderError } from "./provider/index.js";

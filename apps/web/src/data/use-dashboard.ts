@@ -12,14 +12,16 @@ import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFram
 import { fetchDashboard, requestAnalysis, requestReset } from "./api";
 import { createIncidentFixtures } from "./incident-fixtures";
 import { incidentApi, type IncidentClient } from "./incidents";
+import { usePriorityFeed } from "./use-priority-feed";
 
 export type DemoStep = "critical" | "assign" | "deadline" | "resolve";
 
 type Connection = "connecting" | "live" | "reconnecting" | "mock";
 
-export function useDashboard(): {
+export function useDashboard(operatorToken?: string): {
   snapshot: Snapshot | null;
   nowMs: number;
+  priorityFeed: ReturnType<typeof usePriorityFeed>;
   sseRevision: number | null;
   incidentClient: IncidentClient;
   connection: Connection;
@@ -139,10 +141,13 @@ export function useDashboard(): {
     if (boot.fixtures) accept(boot.fixtures.step(step, Date.now()), "sse");
   }
 
+  const priorityFeed = usePriorityFeed(frame.snapshot, nowMs, mockMode, operatorToken);
+
   const value = {
     snapshot: frame.snapshot,
     nowMs,
     sseRevision,
+    priorityFeed,
     incidentClient,
     connection,
     newNotices: frame.visible,

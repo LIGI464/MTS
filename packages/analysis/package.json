@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./priorities": {
+      "types": "./dist/priorities.d.ts",
+      "import": "./dist/priorities.js"
     }
   },
   "files": [

@@ -1,3 +1,4 @@
+import type { AnalyzerConfig } from "@mts/analysis";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,4 +20,13 @@ export function positiveInteger(value: string | undefined, fallback: number): nu
   if (!value?.trim()) return fallback;
   const number = Number(value);
   return Number.isInteger(number) && number > 0 && number <= 2_147_483_647 ? number : fallback;
+}
+
+export function analyzerConfig(env: NodeJS.ProcessEnv): AnalyzerConfig {
+  return {
+    apiKey: env.CODEX_SALE_API_KEY?.trim() || undefined,
+    model: env.CODEX_SALE_MODEL?.trim() || undefined,
+    baseUrl: env.CODEX_SALE_BASE_URL?.trim() || "https://codex.sale/v1",
+    timeoutMs: positiveInteger(env.MTS_AI_TIMEOUT_MS, 8_000),
+  };
 }

@@ -186,14 +186,19 @@ function spawnApi(
 
 async function startResponsesMock(ok: boolean): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const server = createHttpServer((request: IncomingMessage, response: ServerResponse) => {
-    request.resume();
+    let raw = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk: string) => { raw += chunk; });
     request.on("end", () => {
       if (!ok) {
         response.writeHead(500, { "content-type": "text/plain" });
         response.end("mock provider down");
         return;
       }
-      const text = JSON.stringify({
+      const requestBody = JSON.parse(raw) as { input: string };
+      const marker = "\nДанные заявок (JSON):\n";
+      const offset = requestBody.input.indexOf(marker);
+      const text = offset >= 0 ? mockPriorityOutput(requestBody.input.slice(offset + marker.length)) : JSON.stringify({
         summary: "Выжимка мок-провайдера для координатора.",
         team: null,
         reason: "Мок подтвердил факты инцидента.",
@@ -217,6 +222,21 @@ async function startResponsesMock(ok: boolean): Promise<{ baseUrl: string; close
     baseUrl: `http://127.0.0.1:${port}/v1`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
+}
+
+function mockPriorityOutput(json: string): string {
+  const data = JSON.parse(json) as Array<{ id: string; version: string; symptom: string; details: string }>;
+  return JSON.stringify({
+    items: data.map(({ id, version, symptom, details }) => ({
+      id,
+      version,
+      description: symptom === "Поиск по каталогу периодически отвечает медленнее обычного."
+        ? "Поиск по каталогу иногда отвечает с задержкой."
+        : (symptom || details).slice(0, 260) || null,
+      blockedEvidence: null,
+      widespreadEvidence: null,
+    })),
+  });
 }
 
 async function waitUntilReady(baseUrl: string, child: ChildProcess, log: LogBuffer): Promise<void> {

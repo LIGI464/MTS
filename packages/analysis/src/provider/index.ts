@@ -25,10 +25,12 @@ export async function requestProviderText(
   { apiKey, model, baseUrl, timeoutMs }: ProviderConfig,
   input: string,
   fetchImpl: typeof fetch = fetch,
+  cancellation?: AbortSignal,
 ): Promise<string> {
   let signal: AbortSignal | undefined;
   try {
-    signal = AbortSignal.timeout(timeoutMs);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    signal = cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
     const url = new URL(baseUrl.trim() || DEFAULT_BASE_URL);
     url.pathname = `${url.pathname.replace(/\/+$/u, "")}/responses`;
     url.hash = "";

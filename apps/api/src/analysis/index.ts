@@ -1,8 +1,8 @@
 import { performance } from "node:perf_hooks";
-import { createAnalyzer, type AnalyzerConfig, type PreparedAnalysis } from "@mts/analysis";
+import { createAnalyzer, type PreparedAnalysis } from "@mts/analysis";
 import { API_PREFIX, AnalysisResultSchema, type AnalysisResult, type ApiError, type Incident } from "@mts/contracts";
 import type { FastifyInstance } from "fastify";
-import { liveAnalysisEnabled, positiveInteger } from "../http/config.js";
+import { analyzerConfig, liveAnalysisEnabled } from "../http/config.js";
 import { INVALID_OPERATOR_TOKEN, isValidOperatorToken, readBearer } from "../http/operator-token.js";
 import type { RouteContext } from "../runtime-contract.js";
 
@@ -28,13 +28,7 @@ function validatedResult(value: unknown, incident: Incident): AnalysisResult | u
 export function registerAnalysisRoutes(app: FastifyInstance, context: RouteContext, makeAnalyzer = createAnalyzer): void {
   const { runtime, env, operatorToken } = context;
   const liveEnabled = liveAnalysisEnabled(env, operatorToken);
-  const config: AnalyzerConfig = {
-    apiKey: env.CODEX_SALE_API_KEY?.trim() || undefined,
-    model: env.CODEX_SALE_MODEL?.trim() || undefined,
-    baseUrl: env.CODEX_SALE_BASE_URL?.trim() || "https://codex.sale/v1",
-    timeoutMs: positiveInteger(env.MTS_AI_TIMEOUT_MS, 8_000),
-  };
-  const analyzer = makeAnalyzer(config);
+  const analyzer = makeAnalyzer(analyzerConfig(env));
   const cached = new Map<string, CacheEntry>();
   const inFlight = new Map<string, Promise<AnalysisResult>>();
   let generation = 0;
