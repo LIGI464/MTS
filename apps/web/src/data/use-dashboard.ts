@@ -3,12 +3,11 @@ import {
   AnalysisResultSchema,
   SnapshotSchema,
   type AnalysisResult,
-  type Notice,
   type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyFrame, createClientFrameState, dismissFrameNotice, type ClientFrameState } from "./apply";
+import { applyFrame, createClientFrameState, type ClientFrameState } from "./apply";
 import { fetchDashboard, requestAnalysis, requestReset } from "./api";
 import { createIncidentFixtures } from "./incident-fixtures";
 import { incidentApi, type IncidentClient } from "./incidents";
@@ -25,8 +24,6 @@ export function useDashboard(operatorToken?: string): {
   sseRevision: number | null;
   incidentClient: IncidentClient;
   connection: Connection;
-  newNotices: Notice[];
-  dismissNotice: (seq: number) => void;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
   resetDemo: (token: string) => Promise<Snapshot>;
   stepMock?: (step: DemoStep) => void;
@@ -107,12 +104,6 @@ export function useDashboard(operatorToken?: string): {
     return () => window.clearInterval(timer);
   }, []);
 
-  const dismissNotice = useCallback((seq: number) => {
-    const next = dismissFrameNotice(frameRef.current, seq);
-    frameRef.current = next;
-    setFrame(next);
-  }, []);
-
   async function runAnalysis(id: string, token?: string): Promise<AnalysisResult> {
     if (!mockMode) return requestAnalysis(id, token);
     const incident = frameRef.current.snapshot?.incidents.find((item) => item.id === id);
@@ -150,8 +141,6 @@ export function useDashboard(operatorToken?: string): {
     priorityFeed,
     incidentClient,
     connection,
-    newNotices: frame.visible,
-    dismissNotice,
     runAnalysis,
     resetDemo,
   };

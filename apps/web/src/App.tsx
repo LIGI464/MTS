@@ -1,4 +1,4 @@
-import type { Notice, Snapshot } from "@mts/contracts";
+import type { Snapshot } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IncidentBoard } from "./board";
@@ -6,13 +6,12 @@ import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
 import type { DemoStep, useDashboard } from "./data";
 import { coordinatorQuery } from "./data/incidents";
-import { Icon } from "./icons";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
 import { buildQueues, DEFAULT_FILTERS, QUEUE_LABELS, SUMMARY_SEGMENTS, PRIMARY_QUEUES, type QueueFilters } from "./operations/queue-summary";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
-import { useQueueNavigation } from "./operations/use-queue-navigation";
+import { useQueueNavigation, type QueueTarget } from "./operations/use-queue-navigation";
 import type { useIncidentAlerts } from "./operations/use-incident-alerts";
 import type { useIncidentSound } from "./operations/use-incident-sound";
 import operationsStyles from "./operations/dashboard.module.css";
@@ -31,7 +30,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   activity: ReturnType<typeof useIncidentAlerts>;
   sound: ReturnType<typeof useIncidentSound>;
 }) {
-  const [selection, setSelection] = useState<{ id: string; attentionKey?: string } | null>(null);
+  const [selection, setSelection] = useState<{ id: string; attentionKey: string | null; target?: QueueTarget } | null>(null);
   const [filters, setFilters] = useState<QueueFilters>(DEFAULT_FILTERS);
   const opener = useRef<HTMLElement | null>(null);
   const snapshot = dashboard.snapshot;
@@ -45,7 +44,8 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   const queues = buildQueues(filtered.incidents, groups, dashboard.nowMs, filters.status !== "default" && filters.status !== "active");
   const countsDiffer = [...PRIMARY_QUEUES, ...SUMMARY_SEGMENTS].some((category) => summary[category].length !== queues[category].length);
   const { markViewed, resetSequence } = activity;
-  const navigation = useQueueNavigation(queues, summary, activity.pending, resetSequence, markViewed);
+  const navigation = useQueueNavigation(queues, summary, activity.pending, resetSequence);
+  const inspectTarget = navigation.inspect;
 
   useEffect(() => {
     if (resetSequence < 0) return;
@@ -53,15 +53,15 @@ export function App({ dashboard, operatorToken, activity, sound }: {
     setFilters(DEFAULT_FILTERS);
   }, [resetSequence]);
 
-  function select(id: string, key?: string | null) {
+  function select(id: string, attentionKey: string | null, target?: QueueTarget) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const guessed = key === undefined ? activity.pending.find((entry) => entry.incidentId === id)?.key : key;
-    setSelection({ id, attentionKey: guessed ?? undefined });
+    setSelection({ id, attentionKey, target });
   }
 
   const detailOpened = useCallback(() => {
     if (selection?.attentionKey) markViewed(selection.attentionKey);
-  }, [selection, markViewed]);
+    if (selection?.target) inspectTarget(selection.target);
+  }, [selection, markViewed, inspectTarget]);
 
   function returnFocus() {
     const target = opener.current;
@@ -71,7 +71,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   }
 
   function changeFilters(patch: Partial<QueueFilters>) {
-    navigation.cancel();
+    navigation.cancel(true);
     setFilters((previous) => ({ ...previous, ...patch }));
   }
 
@@ -104,18 +104,6 @@ export function App({ dashboard, operatorToken, activity, sound }: {
         <p className="banner" role="status">Показан последний сохранённый снимок. Источник устарел.</p>
       ) : null}
       {snapshot?.source.status === "unavailable" ? <p className="banner" role="status">Файл временно недоступен</p> : null}
-      {dashboard.newNotices.length > 0 ? (
-        <div className="toasts" aria-label="Оповещения">
-          {dashboard.newNotices.map((notice) => (
-            <article key={notice.seq} className={notice.kind === "critical.resolved" ? "toast resolved" : "toast"}>
-              <p>{noticeLine(notice)}</p>
-              <button type="button" aria-label="Закрыть оповещение" onClick={() => dashboard.dismissNotice(notice.seq)}>
-                <Icon name="x-lg" size={16} />
-              </button>
-            </article>
-          ))}
-        </div>
-      ) : null}
       {!snapshot && dashboard.connection === "connecting" ? <div className="skeleton" aria-busy="true">Загрузка очереди</div> : null}
       {!snapshot && dashboard.connection !== "connecting" ? <p className="empty-screen">Нет данных</p> : null}
       {snapshot ? (
@@ -136,13 +124,17 @@ export function App({ dashboard, operatorToken, activity, sound }: {
                 <button type="button" onClick={filtered.retry}>Повторить</button>
               </p>
             ) : null}
-            {navigation.revealed ? (
-              <p className={operationsStyles.countNote} role="status">
-                Заявка {navigation.revealed.id} показана вне фильтров в очереди «{QUEUE_LABELS[navigation.revealed.category].label}».
+            {navigation.revealed.map(({ category, id }) => (
+              <p key={`${category}:${id}`} className={operationsStyles.countNote} role="status">
+                Заявка {id} показана вне фильтров в очереди «{QUEUE_LABELS[category].label}».
               </p>
-            ) : null}
+            ))}
             <IncidentBoard queues={navigation.queues} nowMs={dashboard.nowMs} attention={activity.queues}
-              pulse={navigation.pulse} onPulseEnd={navigation.finishPulse} onInspect={select} />
+              descriptions={dashboard.priorityFeed.descriptions} target={navigation.target} expandedSla={navigation.expandedSla}
+              onToggleSla={navigation.toggleSla} onInspect={(category, id, attention) => {
+                const target = navigation.target(category, id);
+                select(id, target ? target.attentionKey : attention, target);
+              }} />
           </section>
         </>
       ) : null}
@@ -166,18 +158,4 @@ function badgeText(
   if (snapshot?.source.status === "stale") return "Источник устарел";
   if (connection === "live") return "Данные актуальны";
   return "Данные загружаются";
-}
-
-function noticeLine(notice: Notice): string {
-  const id = notice.incidentId ? ` ${notice.incidentId}` : "";
-  if (notice.kind === "critical.resolved") return `Критический инцидент решён${id}`;
-  if (notice.kind === "critical.new") {
-    return `Новый критический инцидент${id}${notice.title ? `: ${notice.title}` : ""}`;
-  }
-  if (notice.kind === "coordinator.assigned") {
-    return `Назначен координаторам${id}${notice.title ? `: ${notice.title}` : ""}`;
-  }
-  if (notice.kind === "coordinator.changed") return `Координатор изменён${id}`;
-  if (notice.kind === "demo.reset") return notice.title ?? "Набор восстановлен";
-  return notice.title ?? "Событие";
 }

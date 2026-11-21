@@ -1,55 +1,76 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { compareIncidents } from "../board/model";
 import type { IncidentAttention } from "./activity";
 import { queueId, type QueueCategory, type QueueMembers } from "./queue-summary";
 
-type Location = { category: QueueCategory; id: string };
-type Request = { serial: number; category: QueueCategory; key: string | undefined; resetSequence: number };
+export type QueueLocation = { category: QueueCategory; id: string };
+export type QueueTarget = QueueLocation & { attentionKey: string | null };
+export type SlaCategory = "near" | "overdue";
+type Request = { serial: number; category: QueueCategory; resetSequence: number };
 
-const PULSE_MS = 900;
+const closedSla = { near: false, overdue: false };
+
+function keyOf({ category, id }: QueueLocation): string {
+  return JSON.stringify([category, id]);
+}
+
+function isSla(category: QueueCategory): category is SlaCategory {
+  return category === "near" || category === "overdue";
+}
 
 export function useQueueNavigation(
-  queues: QueueMembers, full: QueueMembers, pending: readonly IncidentAttention[],
-  resetSequence: number, onViewed: (key: string) => void,
+  queues: QueueMembers, full: QueueMembers, pending: readonly IncidentAttention[], resetSequence: number,
 ) {
   const serial = useRef(0);
   const [request, setRequest] = useState<Request | null>(null);
-  const [revealed, setRevealed] = useState<Location | null>(null);
-  const [pulse, setPulse] = useState<Location | null>(null);
+  const [revealed, setRevealed] = useState<ReadonlyMap<string, QueueLocation>>(() => new Map());
+  const [selected, setSelected] = useState<ReadonlyMap<string, QueueTarget>>(() => new Map());
+  const [expandedSla, setExpandedSla] = useState(closedSla);
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback((clearReveals = false) => {
     serial.current++;
     setRequest(null);
-    setRevealed(null);
-    setPulse(null);
+    if (clearReveals) setRevealed(new Map());
   }, []);
 
-  useLayoutEffect(() => cancel(), [cancel, resetSequence]);
+  useLayoutEffect(() => {
+    cancel(true);
+    setSelected(new Map());
+    setExpandedSla(closedSla);
+  }, [cancel, resetSequence]);
 
   function jump(category: QueueCategory) {
     cancel();
-    const next = pending.find((entry) =>
-      entry.categories.includes(category) && full[category].some(({ id }) => id === entry.incidentId),
-    );
-    setRequest({ serial: serial.current, category, key: next?.key, resetSequence });
+    if (isSla(category)) setExpandedSla({ near: category === "near", overdue: category === "overdue" });
+    setRequest({ serial: serial.current, category, resetSequence });
+  }
+
+  function toggleSla(category: SlaCategory) {
+    cancel();
+    setExpandedSla((open) => ({ ...open, [category]: !open[category] }));
   }
 
   const active = request?.resetSequence === resetSequence ? request : null;
   const category = active?.category;
-  const available = category && active?.key ? pending.filter((entry) =>
+  const next = category && pending.find((entry) =>
     entry.categories.includes(category) && full[category].some(({ id }) => id === entry.incidentId),
-  ) : [];
-  const choice = available.find(({ key }) => key === active?.key) ?? available[0];
-  const id = choice?.incidentId;
-  const key = choice?.key;
-  const location = category && id ? { category, id } : revealed;
-  const outside = location && !queues[location.category].some(({ id }) => id === location.id)
-    ? full[location.category].find(({ id }) => id === location.id) : undefined;
-  const visible = outside && location
-    ? { ...queues, [location.category]: [...queues[location.category], outside].sort(compareIncidents) }
-    : queues;
-  const pulseVisible = Boolean(pulse && visible[pulse.category].some(({ id }) => id === pulse.id));
-  const needsReveal = Boolean(outside && category && id);
+  );
+  const id = category ? (next ? next.incidentId : full[category][0]?.id) : undefined;
+  const attentionKey = next ? next.key : null;
+  const target = category && id ? { category, id } : null;
+  const locations = new Map(revealed);
+  if (target) locations.set(keyOf(target), target);
+  const visible = { ...queues };
+  const outside: QueueLocation[] = [];
+  for (const location of locations.values()) {
+    const { category, id } = location;
+    if (visible[category].some((incident) => incident.id === id)) continue;
+    const incident = full[category].find((entry) => entry.id === id);
+    if (!incident) continue;
+    visible[category] = [...visible[category], incident].sort(compareIncidents);
+    outside.push(location);
+  }
+  const needsReveal = Boolean(target && outside.some((location) => keyOf(location) === keyOf(target)));
 
   useLayoutEffect(() => {
     if (!active || !category) return;
@@ -57,14 +78,15 @@ export function useQueueNavigation(
     if (!region) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const behavior = reduce ? "instant" : "smooth";
-    const focusRegion = () => {
-      region.focus({ preventScroll: true });
-      region.scrollIntoView({ block: "start", behavior });
+    const focusHeading = () => {
+      const heading = region.querySelector<HTMLElement>("[data-sla-toggle]") ?? region;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: "start", behavior });
     };
     const card = id ? region.querySelector<HTMLElement>(`[data-incident-id="${CSS.escape(id)}"]`) : null;
     const title = card?.querySelector<HTMLElement>("[data-card-title]");
-    if (!id || !key || !title) {
-      focusRegion();
+    if (!id || !title) {
+      focusHeading();
       setRequest(null);
       return;
     }
@@ -87,41 +109,46 @@ export function useQueueNavigation(
       }
       if (!visibleOnScreen(title)) title.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
       if (visibleOnScreen(title) && region.contains(title)) {
-        if (needsReveal) setRevealed({ category: category, id: id });
-        if (category === "critical") setPulse({ category, id: id });
-        onViewed(key);
+        const location = { category, id };
+        const key = keyOf(location);
+        if (needsReveal) setRevealed((previous) => new Map(previous).set(key, location));
+        setSelected((previous) => new Map(previous).set(key, { ...location, attentionKey }));
       } else {
-        focusRegion();
+        focusHeading();
       }
       setRequest(null);
     };
 
     frame = requestAnimationFrame(check);
     return () => cancelAnimationFrame(frame);
-  }, [active, category, id, key, needsReveal, onViewed]);
+  }, [active, category, id, attentionKey, needsReveal]);
 
-  const finishPulse = useCallback(() => setPulse(null), []);
+  const inspect = useCallback((target: QueueTarget) => {
+    setSelected((previous) => {
+      const key = keyOf(target);
+      if (previous.get(key)?.attentionKey !== target.attentionKey) return previous;
+      const next = new Map(previous);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
   useLayoutEffect(() => {
-    if (pulse && !pulseVisible) finishPulse();
-  }, [pulse, pulseVisible, finishPulse]);
+    const isCurrent = ({ category, id }: QueueLocation) => full[category].some((entry) => entry.id === id);
+    if ([...selected.values()].some((location) => !isCurrent(location))) {
+      setSelected(new Map([...selected].filter(([, location]) => isCurrent(location))));
+    }
+    if ([...revealed.values()].some((location) => !isCurrent(location))) {
+      setRevealed(new Map([...revealed].filter(([, location]) => isCurrent(location))));
+    }
+  }, [full, selected, revealed]);
 
-  useEffect(() => {
-    if (!pulse) return;
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let timer: number | undefined;
-    const handleMotion = () => {
-      window.clearTimeout(timer);
-      if (motion.matches) timer = window.setTimeout(finishPulse, PULSE_MS);
-    };
-    handleMotion();
-    motion.addEventListener("change", handleMotion);
-    return () => {
-      window.clearTimeout(timer);
-      motion.removeEventListener("change", handleMotion);
-    };
-  }, [pulse, finishPulse]);
-
-  return { queues: visible, pulse, finishPulse, revealed: outside ? location : null, jump, cancel };
+  return {
+    queues: visible,
+    revealed: outside,
+    target: (category: QueueCategory, id: string) => selected.get(keyOf({ category, id })),
+    expandedSla, toggleSla, jump, cancel, inspect,
+  };
 }
 
 function visibleOnScreen(target: HTMLElement): boolean {

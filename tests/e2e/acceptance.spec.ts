@@ -39,6 +39,17 @@ function card(page: Page, groupName: string, id: string): Locator {
   return group(page, groupName).locator("article").filter({ hasText: id });
 }
 
+async function expectJournalEntry(page: Page, type: string, id?: string) {
+  await expect(page.locator(".toasts")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Закрыть оповещение" })).toHaveCount(0);
+  await page.getByRole("button", { name: /^События/ }).click();
+  const journal = page.getByRole("dialog", { name: "События" });
+  let event = journal.getByRole("listitem").filter({ has: page.getByText(type, { exact: true }) });
+  if (id) event = event.filter({ hasText: id });
+  await expect(event).toHaveCount(1);
+  await page.keyboard.press("Escape");
+}
+
 async function updateCoordinatorTeam(app: RunningApp) {
   const rows: RawIncidentFields[] = JSON.parse(await readLive(app.dataDir));
   await writeLive(app.dataDir, JSON.stringify(rows.map((row) => row.id === HIGH_ID
@@ -58,12 +69,15 @@ test("A1 показывает шесть блоков очередей и обе
 
   await expect(group(page, "Критические").getByText("Нет инцидентов")).toBeVisible();
   const incident = card(page, "Высокий приоритет", HIGH_ID);
-  await expect(incident.getByText("Каталог услуг")).toBeVisible();
-  await expect(incident.getByText(/Регистрация/)).toBeVisible();
-  await expect(incident.getByText("Исполнитель не назначен")).toBeVisible();
-  await expect(incident.getByText("Поддержка платформы заказов")).toBeVisible();
+  await expect(incident.getByText("Статусы новых заказов обновляются с задержкой.")).toBeVisible();
   await expect(incident.getByText("Назначен", { exact: true })).toBeVisible();
   await expect(incident.getByText("В сроке")).toBeVisible();
+  await incident.getByRole("button", { name: "Подробнее" }).click();
+  const details = page.getByRole("dialog").locator(".detail-fields").first();
+  await expect(details.getByText("Каталог услуг", { exact: true })).toBeVisible();
+  await expect(details.getByText("Регистрация", { exact: true })).toBeVisible();
+  await expect(details.getByText("Исполнитель", { exact: true })).toBeVisible();
+  await expect(details.getByText("Поддержка платформы заказов", { exact: true })).toBeVisible();
 });
 
 test("A2 показывает Research у координаторов по умолчанию и в приоритетах по фильтру", async ({ page }) => {
@@ -77,7 +91,7 @@ test("A2 показывает Research у координаторов по умо
   const research = card(page, "Средний приоритет", RESEARCH_ID);
   await expect(research).toBeVisible();
   await expect(card(page, "У координаторов", RESEARCH_ID)).toHaveCount(1);
-  await expect(research.getByText("Каталог услуг")).toBeVisible();
+  await expect(research.getByText("В заявке нет описания симптомов")).toBeVisible();
   await expect(research.getByText(/Решён · исследование/)).toBeVisible();
   await expect(research.locator("[title='Срок не задан']")).toBeVisible();
 });
@@ -90,13 +104,12 @@ test("A3–A6 и A11 проводят сценарии, обновление ITS
   applyDemoStep(app.dataDir, "critical");
   const critical = card(page, "Критические", HIGH_ID);
   await expect(critical).toBeVisible();
-  await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+  await expectJournalEntry(page, "Новый критический инцидент", HIGH_ID);
 
   await updateCoordinatorTeam(app);
-  await expect(critical.getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
   await expect(card(page, "У координаторов", HIGH_ID)).toHaveCount(1);
-  await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
-  await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+  await expectJournalEntry(page, "Передан группе координаторов", HIGH_ID);
+  await expectJournalEntry(page, "Новый критический инцидент", HIGH_ID);
 
   applyDemoStep(app.dataDir, "deadline");
   const timed = card(page, "Высокий приоритет", OTHER_ID);
@@ -106,7 +119,7 @@ test("A3–A6 и A11 проводят сценарии, обновление ITS
 
   applyDemoStep(app.dataDir, "resolve");
   await expect(group(page, "Критические").getByText(HIGH_ID)).toHaveCount(0);
-  await expect(page.locator(".toasts").getByText(`Критический инцидент решён ${HIGH_ID}`)).toHaveCount(1);
+  await expectJournalEntry(page, "Критический инцидент решён", HIGH_ID);
   await page.getByRole("combobox", { name: "Статус", exact: true }).selectOption("Resolved");
   await expect(critical).toBeVisible();
   await page.getByRole("button", { name: "Сбросить", exact: true }).click();
@@ -118,7 +131,7 @@ test("A3–A6 и A11 проводят сценарии, обновление ITS
   await page.getByRole("button", { name: "Подтвердить сброс" }).click();
   await expect(service.getByRole("status")).toHaveText("Набор восстановлен");
   await returnToBoard(page);
-  await expect(page.locator(".toasts").getByText("Набор восстановлен")).toBeVisible();
+  await expectJournalEntry(page, "Набор восстановлен");
   await expect(group(page, "Критические").getByText("Нет инцидентов")).toBeVisible();
   await expect(group(page, "Критические").getByText(HIGH_ID)).toHaveCount(0);
 });
@@ -242,13 +255,13 @@ test("A10 после обрыва SSE не повторяет оповещени
   const app = await openApp();
   await openDashboard(page, app);
   applyDemoStep(app.dataDir, "critical");
-  await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+  await expectJournalEntry(page, "Новый критический инцидент", HIGH_ID);
 
   await app.halt();
   await expect(page.getByText("Переподключение")).toBeVisible();
   await app.resume();
   await expect(page.getByText("Данные актуальны")).toBeVisible();
-  await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+  await expectJournalEntry(page, "Новый критический инцидент", HIGH_ID);
   await expect(card(page, "Критические", HIGH_ID)).toBeVisible();
 
   await app.halt();
@@ -256,26 +269,28 @@ test("A10 после обрыва SSE не повторяет оповещени
   await updateCoordinatorTeam(app);
   await app.resume();
   await expect(page.getByText("Данные актуальны")).toBeVisible();
-  await expect(card(page, "Критические", HIGH_ID).getByText("КЦ ИТ Координаторы Массовых Инцидентов")).toBeVisible();
-  await expect(page.locator(".toasts").getByText(`Назначен координаторам ${HIGH_ID}`)).toHaveCount(1);
-  await expect(page.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+  await expect(card(page, "У координаторов", HIGH_ID)).toBeVisible();
+  await expectJournalEntry(page, "Передан группе координаторов", HIGH_ID);
+  await expectJournalEntry(page, "Новый критический инцидент", HIGH_ID);
 });
 
 test("две страницы видят одну атомарную правку файла", async ({ browser }) => {
   const app = await openApp();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const rightContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const left = await context.newPage();
-  const right = await context.newPage();
+  const right = await rightContext.newPage();
   try {
     await openDashboard(left, app);
-    await openDashboard(right, app);
+    await openDashboard(right, app, "/");
     applyDemoStep(app.dataDir, "critical");
     await expect(card(left, "Критические", HIGH_ID)).toBeVisible();
     await expect(card(right, "Критические", HIGH_ID)).toBeVisible();
-    await expect(left.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
-    await expect(right.locator(".toasts").getByText(`Новый критический инцидент ${HIGH_ID}`)).toHaveCount(1);
+    await expectJournalEntry(left, "Новый критический инцидент", HIGH_ID);
+    await expectJournalEntry(right, "Новый критический инцидент", HIGH_ID);
   } finally {
     await context.close();
+    await rightContext.close();
   }
 });
 

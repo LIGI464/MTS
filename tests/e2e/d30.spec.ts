@@ -152,13 +152,14 @@ test("D30 проводит сценарии разработчика, чтени
     };
     await putCoordinator(coordinatorDirectory[0].name);
     for (const board of [left, right]) {
-      await expect(card(board, id).getByText(COORDINATOR_TEAM)).toBeVisible();
+      await expect(board.locator(`#queue-coordinator [data-incident-id="${id}"]`)).toHaveCount(1);
       await expect(card(board, id).getByText("ITSM", { exact: true })).toBeVisible();
     }
     const inspect = card(left, id).getByRole("button", { name: "Подробнее" });
     await inspect.click();
     const leftDetail = left.getByRole("dialog");
     await expect(leftDetail.locator("dd").filter({ hasText: "ITSM" })).toHaveText(`${coordinatorDirectory[0].name} ITSM`);
+    await expect(leftDetail.locator(".detail-fields").first().getByText(COORDINATOR_TEAM, { exact: true })).toBeVisible();
     await expect(leftDetail.getByRole("button", { name: /назначить|сменить координатора/i })).toHaveCount(0);
     await putCoordinator(coordinatorDirectory[1].name);
     await expect(leftDetail.locator("dd").filter({ hasText: "ITSM" })).toHaveText(`${coordinatorDirectory[1].name} ITSM`);
