@@ -67,3 +67,29 @@
 @media (max-width: 700px) {
   .panel { width: 100%; }
 }
+
+.workload { background: var(--canvas); }
+
+.workloadCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 10px 0;
+}
+
+.workloadCounts div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.workloadCounts dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.workloadCounts dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,5 +1,5 @@
 import {
-  matchesPriorityRecommendation, priorityQueueMembership, type Snapshot,
+  isActiveState, matchesPriorityRecommendation, priorityQueueMembership, type Snapshot,
 } from "@mts/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,9 @@ import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
 import { PriorityFeed, type ChosenRecommendation } from "./operations/priority-feed";
 import { buildQueues, DEFAULT_FILTERS, QUEUE_LABELS, SUMMARY_SEGMENTS, PRIMARY_QUEUES, type QueueFilters } from "./operations/queue-summary";
+import { createShiftHandoff } from "./operations/shift-handoff";
+import { ShiftPanel } from "./operations/shift-panel";
+import { countTeamWorkload, findIncidentClusters } from "./operations/shift-triage";
 import { useFilteredIncidents } from "./operations/use-filtered-incidents";
 import { useQueueNavigation, type QueueTarget } from "./operations/use-queue-navigation";
 import type { useIncidentAlerts } from "./operations/use-incident-alerts";
@@ -42,9 +45,12 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   const opener = useRef<{ node: HTMLElement | null; fromFeed: boolean } | null>(null);
   const snapshot = dashboard.snapshot;
   const incidents = useMemo(() => uniqueIncidents(snapshot?.incidents ?? []), [snapshot]);
+  const clusters = useMemo(() => findIncidentClusters(incidents), [incidents]);
   const groups = snapshot?.groups ?? EMPTY_GROUPS;
   const coordinatorIds = useMemo(() => new Set(groups.coordinator), [groups.coordinator]);
   const selected = incidents.find(({ id }) => id === selection?.id);
+  const selectedTeam = selected?.team && isActiveState(selected.state)
+    ? countTeamWorkload(incidents, selected.team, dashboard.nowMs) : null;
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, coordinatorIds, dashboard.incidentClient, snapshot?.revision);
   const summary = buildQueues(incidents, groups, dashboard.nowMs);
@@ -91,7 +97,14 @@ export function App({ dashboard, operatorToken, activity, sound }: {
     opener.current = null;
     if (target?.fromFeed) focusFeed(target.node);
     else if (target?.node?.isConnected) target.node.focus({ preventScroll: true });
-    else document.getElementById("incident-search")?.focus({ preventScroll: true });
+    else document.getElementById("incident-search")?.focus();
+  }
+
+  function showTeamQueue(team: string) {
+    navigation.cancel(true);
+    setFilters({ ...DEFAULT_FILTERS, team, status: "active" });
+    opener.current = null;
+    setSelection(null);
   }
 
   function changeFilters(patch: Partial<QueueFilters>) {
@@ -134,6 +147,15 @@ export function App({ dashboard, operatorToken, activity, sound }: {
         <>
           <DashboardMetrics queues={summary} pending={activity.pending} onJump={navigation.jump} />
           <PriorityFeed data={dashboard.priorityFeed} nowMs={dashboard.nowMs} onChoose={chooseRecommendation} />
+          <ShiftPanel clusters={clusters}
+            makeHandoff={snapshot.source.lastGoodAt ? () => createShiftHandoff({
+              source: snapshot.source, revision: snapshot.revision, nowMs: dashboard.nowMs, queues: summary, clusters,
+              sourceLabel: badgeText(dashboard.connection, snapshot), events: activity.events,
+            }) : null}
+            onInspect={(incident, source) => select(
+              incident.id, activity.pending.find((entry) => entry.incidentId === incident.id)?.key ?? null,
+              undefined, undefined, source,
+            )} />
           <section aria-labelledby="queue-heading" aria-busy={filtered.loading}>
             <div className={operationsStyles.queueHeader}>
               <h2 id="queue-heading">Очереди инцидентов</h2>
@@ -166,6 +188,7 @@ export function App({ dashboard, operatorToken, activity, sound }: {
       {selection ? (
         <IncidentDetails key={selection.id} id={selection.id} incident={selected}
           nowMs={dashboard.nowMs} client={dashboard.incidentClient} revision={snapshot?.revision}
+          workload={selectedTeam} onShowTeam={showTeamQueue}
           recommendation={selection.recommendation} onShown={detailOpened} assistantEscape={assistantOpen}
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}

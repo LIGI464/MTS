@@ -2,19 +2,19 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon, type IconName } from "../icons";
 import { eventIdentity, filterActivity, PIN_STORAGE_PREFIX, readPinnedEvents, storePin, type ActivityFilter } from "./activity-pins";
-import type { ActivityEvent } from "./activity";
+import { ACTIVITY_LABELS, type ActivityEvent } from "./activity";
 import styles from "./dashboard.module.css";
 
 const eventTypes = {
-  "incident.new": { label: "Новый инцидент", icon: "plus-circle", tone: "info" },
-  "critical.new": { label: "Новый критический инцидент", icon: "shield-exclamation", tone: "critical" },
-  "coordinator.assigned": { label: "Передан группе координаторов", icon: "people", tone: "info" },
-  "coordinator.changed": { label: "Координатор изменён", icon: "people", tone: "info" },
-  "critical.resolved": { label: "Критический инцидент решён", icon: "check-circle", tone: "success" },
-  "sla.near": { label: "Срок близко", icon: "alarm", tone: "warning" },
-  "sla.overdue": { label: "Срок просрочен", icon: "clock-history", tone: "warning" },
-  "demo.reset": { label: "Набор восстановлен", icon: "arrow-counterclockwise", tone: "neutral" },
-} satisfies Record<ActivityEvent["kind"], { label: string; icon: IconName; tone: string }>;
+  "incident.new": { icon: "plus-circle", tone: "info" },
+  "critical.new": { icon: "shield-exclamation", tone: "critical" },
+  "coordinator.assigned": { icon: "people", tone: "info" },
+  "coordinator.changed": { icon: "people", tone: "info" },
+  "critical.resolved": { icon: "check-circle", tone: "success" },
+  "sla.near": { icon: "alarm", tone: "warning" },
+  "sla.overdue": { icon: "clock-history", tone: "warning" },
+  "demo.reset": { icon: "arrow-counterclockwise", tone: "neutral" },
+} satisfies Record<ActivityEvent["kind"], { icon: IconName; tone: string }>;
 
 const clock = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
@@ -78,7 +78,7 @@ export function ActivityPanel({ events, unreadCount, markRead, onInspect, childr
             <select ref={filterSelect} value={filter} onChange={(event) => setFilter(event.target.value as ActivityFilter)}>
               <option value="">Все типы</option>
               <option value="pinned">Закрепленные</option>
-              {Object.entries(eventTypes).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+              {Object.entries(ACTIVITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           {visible.length === 0 ? (
@@ -89,7 +89,8 @@ export function ActivityPanel({ events, unreadCount, markRead, onInspect, childr
                 const key = eventIdentity(event);
                 const pinned = pins.has(key);
                 const pinAction = pinned ? "Открепить событие" : "Закрепить событие";
-                const { icon, label, tone } = eventTypes[event.kind];
+                const { icon, tone } = eventTypes[event.kind];
+                const label = ACTIVITY_LABELS[event.kind];
                 const id = event.incidentId;
                 return (
                   <li key={key} className={styles.event}>

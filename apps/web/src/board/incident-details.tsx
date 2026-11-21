@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { detailQuery, type IncidentClient } from "../data/incidents";
 import { Icon } from "../icons";
 import type { ChosenRecommendation } from "../operations/priority-feed";
+import type { TeamWorkload } from "../operations/shift-triage";
 import { CoordinatorValue } from "./coordinator";
 import { formatMoscow, presentSla } from "./format";
 import { itsmHref } from "./itsm";
@@ -37,13 +38,15 @@ const sections = [
 
 const knownKeys = new Set(sections.flatMap(([, labels]) => Object.keys(labels)));
 
-export function IncidentDetails({ id, incident, nowMs, client, revision, recommendation, onShown, onClose, onReturnFocus, assistantEscape }: {
+export function IncidentDetails({ id, incident, nowMs, client, revision, recommendation, workload, onShowTeam, onShown, onClose, onReturnFocus, assistantEscape }: {
   id: string;
   incident: Incident | undefined;
   nowMs: number;
   client: IncidentClient;
   revision?: number;
   recommendation?: ChosenRecommendation;
+  workload: TeamWorkload | null;
+  onShowTeam: (team: string) => void;
   onShown: () => void;
   onClose: () => void;
   onReturnFocus: () => void;
@@ -94,6 +97,19 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, recomme
               ["Команда", known.team], ["Исполнитель", known.assignee],
               ["Координатор", <CoordinatorValue coordinator={current} />],
             ]} />
+          ) : null}
+          {workload ? (
+            <section className={`${styles.texts} ${styles.workload}`} aria-labelledby="team-workload-heading">
+              <h3 id="team-workload-heading">Нагрузка команды по снимку ITSM</h3>
+              <dl className={styles.workloadCounts}>
+                <div><dt>Активные</dt><dd>{workload.active}</dd></div>
+                <div><dt>Срок близко</dt><dd>{workload.near}</dd></div>
+                <div><dt>Просрочены</dt><dd>{workload.overdue}</dd></div>
+              </dl>
+              <button type="button" className={styles.button} onClick={() => onShowTeam(workload.team)}>
+                Показать очередь команды
+              </button>
+            </section>
           ) : null}
           {detail.isPending ? <p role="status">Загружаем полную запись…</p> : null}
           {detail.isError ? (

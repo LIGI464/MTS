@@ -1,0 +1,120 @@
+.panel {
+  min-width: 0;
+  margin-top: var(--space-section);
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-section);
+  background: var(--surface);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.header h2 {
+  margin: 0;
+  font: 500 20px/1.25 var(--font-display);
+}
+
+.groups { margin-top: 8px; }
+
+.groups summary {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.groups summary strong {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 0 8px;
+  border-radius: 100px;
+  background: var(--canvas);
+}
+
+.context,
+.empty {
+  margin: 6px 0;
+  color: var(--muted);
+  font: 400 14px/1.5 var(--font-text);
+}
+
+.clusterList,
+.members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clusterList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.cluster {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--canvas);
+  overflow-wrap: anywhere;
+}
+
+.cluster h3 {
+  margin: 0;
+  font: 500 16px/1.35 var(--font-display);
+}
+
+.cluster p { margin: 4px 0 0; }
+
+.members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.members li { max-width: 100%; }
+
+.members button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.handoff {
+  width: min(100% - 32px, 620px);
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--canvas);
+  color: var(--text);
+  font: 400 14px/1.55 var(--font-text);
+  resize: vertical;
+}
+
+.copyStatus {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .handoff { width: 100%; }
+}
