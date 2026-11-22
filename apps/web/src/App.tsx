@@ -8,7 +8,8 @@ import { IncidentBoard } from "./board";
 import { IncidentDetails } from "./board/incident-details";
 import { uniqueIncidents } from "./board/model";
 import type { DemoStep, useDashboard } from "./data";
-import { coordinatorQuery } from "./data/incidents";
+import { DashboardRequestError } from "./data/api";
+import { coordinatorQuery, detailQuery } from "./data/incidents";
 import { ActivityPanel } from "./operations/activity-panel";
 import { DashboardMetrics, SoundButton } from "./operations/dashboard";
 import { IncidentFilters } from "./operations/filters";
@@ -45,6 +46,15 @@ export function App({ dashboard, operatorToken, activity, sound }: {
   const groups = snapshot?.groups ?? EMPTY_GROUPS;
   const coordinatorIds = useMemo(() => new Set(groups.coordinator), [groups.coordinator]);
   const selected = incidents.find(({ id }) => id === selection?.id);
+  // Observe the same query as IncidentDetails, which owns the initial fetch.
+  const selectedDetail = useQuery({
+    ...detailQuery(dashboard.incidentClient, selection?.id ?? "", selected?.version, snapshot?.revision),
+    enabled: false,
+  });
+  const detailFailed = selectedDetail.isError && !selectedDetail.isFetching;
+  const detailError = selectedDetail.error instanceof DashboardRequestError
+    ? selectedDetail.error.message
+    : "Не удалось загрузить данные заявки.";
   const directory = useQuery({ ...coordinatorQuery(dashboard.incidentClient), enabled: Boolean(snapshot) });
   const filtered = useFilteredIncidents(incidents, filters, dashboard.nowMs, coordinatorIds, dashboard.incidentClient, snapshot?.revision);
   const summary = buildQueues(incidents, groups, dashboard.nowMs);
@@ -170,8 +180,15 @@ export function App({ dashboard, operatorToken, activity, sound }: {
           onClose={() => setSelection(null)} onReturnFocus={returnFocus} />
       ) : null}
       <AssistantHost
-        detailsOpen={Boolean(selection)}
-        incident={selected}
+        incident={selection ? {
+          id: selection.id,
+          title: selected?.title ?? selectedDetail.data?.ticket.title ?? null,
+          // Live incidents and archived tickets have different version identifiers.
+          version: selected?.version ?? selectedDetail.data?.ticket.version,
+        } : null}
+        contextReady={!selection || (selectedDetail.isSuccess && !selectedDetail.isFetching)}
+        contextError={detailFailed ? detailError : null}
+        retryContext={() => { void selectedDetail.refetch(); }}
         operatorToken={operatorToken}
         requestChat={dashboard.requestAssistantChat}
         onOpenChange={setAssistantOpen}

@@ -7,6 +7,7 @@ import {
   AssistantSimilarIncidentSchema,
   type ApiError,
   type AssistantChatResponse,
+  type Snapshot,
 } from "@mts/contracts";
 import type { FastifyInstance } from "fastify";
 import { liveAnalysisEnabled, positiveInteger } from "../http/config.js";
@@ -24,12 +25,22 @@ const INVALID_REQUEST = {
   message: "Некорректный запрос к помощнику.",
 } satisfies ApiError;
 
+const CONTEXT_CHANGED = {
+  code: "ASSISTANT_CONTEXT_CHANGED",
+  message: "Данные заявки обновились. Проверьте заявку и отправьте вопрос ещё раз.",
+} satisfies ApiError;
+
 const CACHE_SIZE = 128;
 const CACHE_MS = 10 * 60_000;
-const FALLBACK_MS = 30_000;
 const LIVE_WINDOW_MS = 60_000;
 
 type CacheEntry = { result: AssistantChatResponse; expiresAt: number };
+type Diagnostics = {
+  revision: number;
+  sourceStatus: Snapshot["source"]["status"];
+  authorized: boolean;
+  hasIncident: boolean;
+};
 
 function toMatches(search: ReturnType<typeof resolveAssistantQuery>["search"]): AssistantChatResponse["matches"] {
   if (!search || search.kind !== "found") return [];
@@ -42,6 +53,7 @@ export function registerAssistantRoutes(
   makeResponder: typeof createAssistantResponder = createAssistantResponder,
 ): void {
   const { runtime, env, operatorToken, dataDir } = context;
+  const liveMode = env.MTS_AI_MODE === "live";
   const liveEnabled = liveAnalysisEnabled(env, operatorToken);
   const responder: AssistantResponder = makeResponder({
     apiKey: env.CODEX_SALE_API_KEY?.trim() || undefined,
@@ -73,21 +85,24 @@ export function registerAssistantRoutes(
     clear();
   });
 
-  async function deliver(prepared: ReturnType<AssistantResponder["prepare"]>, useLive: boolean): Promise<AssistantChatResponse> {
+  async function deliver(
+    prepared: ReturnType<AssistantResponder["prepare"]>, useLive: boolean, diagnostics: Diagnostics,
+  ): Promise<AssistantChatResponse> {
     const began = performance.now();
     try {
       const result = AssistantChatResponseSchema.parse(await responder.run(prepared, { useLive }));
-      if (useLive && result.reason && result.reason !== "rules_mode" && result.reason !== null) {
-        app.log.warn({ reason: result.reason, durationMs: Math.round(performance.now() - began) }, "Резервный ответ помощника.");
+      if (useLive && result.reason && result.reason !== "rules_mode") {
+        app.log.warn({ ...diagnostics, reason: result.reason, durationMs: Math.round(performance.now() - began) }, "Резервный ответ помощника.");
       }
       return result;
     } catch {
-      app.log.warn({ reason: "provider_error", durationMs: Math.round(performance.now() - began) }, "Резервный ответ помощника.");
+      app.log.warn({ ...diagnostics, reason: "provider_error", durationMs: Math.round(performance.now() - began) }, "Резервный ответ помощника.");
       return { ...AssistantChatResponseSchema.parse(prepared.rules), reason: "provider_error" };
     }
   }
 
   app.post(`${API_PREFIX}/assistant/chat`, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
     const parsed = AssistantChatRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send(INVALID_REQUEST);
 
@@ -95,6 +110,7 @@ export function registerAssistantRoutes(
     const authorized = isValidOperatorToken(operatorToken, readBearer(header));
     if (header !== undefined && !authorized) return reply.code(403).send(INVALID_OPERATOR_TOKEN);
 
+    const wantsLive = authorized && liveMode;
     const useLive = liveEnabled && authorized;
     const snapshot = runtime.getSnapshot();
     const resolved = resolveAssistantQuery(runtime, parsed.data, {
@@ -102,6 +118,10 @@ export function registerAssistantRoutes(
       revision: snapshot.revision,
       snapshot,
     });
+    const requestedVersion = parsed.data.context.incidentVersion;
+    if (parsed.data.mode === "incident" && requestedVersion && requestedVersion !== resolved.context.incidentVersion) {
+      return reply.code(409).send(CONTEXT_CHANGED);
+    }
     const matches = toMatches(resolved.search);
     const prepared = responder.prepare({
       mode: parsed.data.mode,
@@ -135,11 +155,10 @@ export function registerAssistantRoutes(
       parsed.data.question,
       parsed.data.history,
       ASSISTANT_PROMPT_VERSION,
-      useLive,
+      wantsLive,
       prepared.key,
     ]);
     const now = performance.now();
-    reply.header("Cache-Control", "no-store");
 
     const hit = cached.get(key);
     if (hit) {
@@ -160,10 +179,15 @@ export function registerAssistantRoutes(
     }
 
     const startedGeneration = generation;
-    const work = deliver(prepared, useLive).then((result) => {
-      if (startedGeneration === generation) {
-        const fallback = result.reason !== null && result.reason !== "rules_mode";
-        cached.set(key, { result, expiresAt: performance.now() + (fallback ? FALLBACK_MS : CACHE_MS) });
+    const answer = wantsLive && !useLive
+      ? Promise.resolve({ ...prepared.rules, reason: "not_configured" as const })
+      : deliver(prepared, useLive, {
+        revision: snapshot.revision, sourceStatus: snapshot.source.status, authorized, hasIncident: resolved.incident !== null,
+      });
+    const work = answer.then((result) => {
+      const cacheable = result.source === "llm" || (!wantsLive && result.reason === "rules_mode");
+      if (startedGeneration === generation && cacheable) {
+        cached.set(key, { result, expiresAt: performance.now() + CACHE_MS });
         if (cached.size > CACHE_SIZE) {
           const oldest = cached.keys().next();
           if (!oldest.done) cached.delete(oldest.value);

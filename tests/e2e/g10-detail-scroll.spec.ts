@@ -41,10 +41,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await page.setViewportSize(viewport);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.route(`**${API_PREFIX}/assistant/chat`, (route) => {
-      const reply = route.request().postDataJSON().question
-        ? chatReply
-        : { ...chatReply, summary: "Открыта заявка о печати этикеток.", nextSteps: [] };
-      return route.fulfill({ json: reply });
+      return route.fulfill({ json: { ...chatReply, context: route.request().postDataJSON().context } });
     });
     await page.goto(`${app.url}/admin/incidents`, { waitUntil: "domcontentloaded" });
     const opener = page.locator(`[data-incident-id="${incidentId}"]`).getByRole("button", { name: "Подробнее" });

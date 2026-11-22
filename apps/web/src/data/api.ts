@@ -40,16 +40,28 @@ export async function fetchDashboard(): Promise<Snapshot> {
 export async function requestAssistantChat(
   payload: AssistantChatRequest,
   token?: string,
+  signal?: AbortSignal,
 ): Promise<AssistantChatResponse> {
   const parsedRequest = AssistantChatRequestSchema.parse(payload);
   const headers = new Headers({ "content-type": "application/json" });
-  if (token) headers.set("authorization", `Bearer ${token}`);
+  const operator = token?.trim();
+  if (operator) {
+    try {
+      headers.set("authorization", `Bearer ${operator}`);
+    } catch {
+      throw new DashboardRequestError("OPERATOR_TOKEN_INVALID", "Требуется действующий токен оператора.", 403);
+    }
+  }
   const response = await fetch(`${API_PREFIX}/assistant/chat`, {
     method: "POST",
     headers,
     body: JSON.stringify(parsedRequest),
+    signal,
+  }).catch((error: unknown) => {
+    if (signal?.aborted) throw error;
+    throw new DashboardRequestError("ASSISTANT_UNREACHABLE", "Не удалось связаться с помощником.");
   });
-  if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось получить ответ помощника");
+  if (!response.ok) throw errorFromBody(await readJson(response), "Не удалось получить ответ помощника", response.status);
   const parsed = AssistantChatResponseSchema.safeParse(await response.json());
   if (!parsed.success) throw new DashboardRequestError("INVALID_ASSISTANT", "Ответ помощника не прошёл проверку");
   return parsed.data;

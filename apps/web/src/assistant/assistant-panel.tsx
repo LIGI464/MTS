@@ -1,4 +1,4 @@
-import type { AssistantSimilarIncident } from "@mts/contracts";
+import type { AssistantChatResponse, AssistantSimilarIncident } from "@mts/contracts";
 import type { RefObject } from "react";
 import type { SessionState } from "./state";
 import { formatMoscow } from "../board/format";
@@ -6,23 +6,37 @@ import { Icon } from "../icons";
 import styles from "./assistant.module.css";
 
 const COMPLETED = new Set(["Resolved", "Closed"]);
+const FALLBACK_MESSAGES = {
+  not_configured: "Модель не настроена.",
+  timeout: "Модель не ответила вовремя.",
+  provider_error: "Сервис модели недоступен.",
+  invalid_output: "Ответ модели не прошёл проверку.",
+} as const;
 
 export function AssistantPanel({
   state,
   inputRef,
+  contextError,
   onDraft,
   onSubmit,
   onCollapse,
-  onRetry,
+  onCancel,
+  onRetryContext,
 }: {
   state: SessionState;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  contextError: string | null;
   onDraft: (value: string) => void;
   onSubmit: () => void;
   onCollapse: () => void;
-  onRetry: () => void;
+  onCancel: () => void;
+  onRetryContext: () => void;
 }) {
   const conversationId = state.incidentId ?? "dashboard";
+  const { pending, error } = state;
+  const sending = pending?.phase === "sending";
+  const waitingError = pending?.phase === "queued" ? contextError : null;
+  const empty = !state.messages.length && !pending && !error;
 
   return (
     <aside
@@ -56,34 +70,39 @@ export function AssistantPanel({
         className={styles.messages}
         aria-live="polite"
         aria-relevant="additions text"
-        aria-busy={state.pending}
+        aria-busy={sending}
       >
+        {empty ? (
+          <p className={styles.pending}>{state.mode === "incident"
+            ? "Задайте вопрос по заявке или по сводке пульта."
+            : "Укажите ID инцидента или опишите симптомы."}</p>
+        ) : null}
         {state.messages.map((message) => {
-          if (message.kind === "welcome") {
-            return (
-              <article key={message.id} className={styles.assistantMessage}>
-                <p>Укажите ID инцидента или опишите симптомы.</p>
-              </article>
-            );
-          }
           if (message.kind === "user") {
             return (
               <article key={message.id} className={styles.userMessage}>
-                <p>{message.text}</p>
-              </article>
-            );
-          }
-          if (message.kind === "error") {
-            return (
-              <article key={message.id} className={styles.errorMessage} role="alert">
-                <p>{message.message}</p>
-                <button type="button" onClick={onRetry}>Повторить</button>
+                <p className={styles.summary}>{message.text}</p>
               </article>
             );
           }
           return <AssistantAnswer key={message.id} response={message.response} />;
         })}
-        {state.pending ? <p className={styles.pending} role="status">Помощник готовит ответ…</p> : null}
+        {sending ? <article className={styles.userMessage}><p className={styles.summary}>{pending.question}</p></article> : null}
+        {pending ? (
+          <div className={styles.pendingActions}>
+            <p className={styles.pending} role={waitingError ? "alert" : "status"}>
+              {waitingError ?? (sending ? "Помощник готовит ответ…" : "Ждём данные заявки…")}
+            </p>
+            {waitingError ? <button type="button" onClick={onRetryContext}>Повторить загрузку</button> : null}
+            <button type="button" onClick={onCancel}>Отменить</button>
+          </div>
+        ) : null}
+        {error ? (
+          <article className={styles.errorMessage} role="alert">
+            <p className={styles.summary}>{error}</p>
+            <button type="button" disabled={!state.draft.trim()} onClick={onSubmit}>Повторить</button>
+          </article>
+        ) : null}
       </div>
 
       <form
@@ -99,9 +118,9 @@ export function AssistantPanel({
           id={`assistant-input-${conversationId}`}
           className={styles.input}
           rows={2}
-          value={state.draft}
-          disabled={state.pending}
-          placeholder={state.incidentId ? "Уточните вопрос по заявке" : "Номер инцидента или симптомы"}
+          value={sending ? "" : state.draft}
+          disabled={Boolean(pending)}
+          placeholder="Введите сообщение"
           onChange={(event) => onDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -110,7 +129,7 @@ export function AssistantPanel({
             }
           }}
         />
-        <button type="submit" className={styles.send} disabled={state.pending || state.draft.trim().length === 0}>
+        <button type="submit" className={styles.send} disabled={Boolean(pending) || state.draft.trim().length === 0}>
           Отправить сообщение
         </button>
       </form>
@@ -118,8 +137,10 @@ export function AssistantPanel({
   );
 }
 
-function AssistantAnswer({ response }: { response: import("@mts/contracts").AssistantChatResponse }) {
+function AssistantAnswer({ response }: { response: AssistantChatResponse }) {
   const count = response.matches.length;
+  const { reason } = response;
+  const fallback = reason && reason !== "rules_mode" ? FALLBACK_MESSAGES[reason] : null;
   return (
     <article className={styles.assistantMessage}>
       <p className={styles.summary}>{response.summary}</p>
@@ -135,7 +156,10 @@ function AssistantAnswer({ response }: { response: import("@mts/contracts").Assi
         <p className={styles.meta} data-numeric="tabular">Найдено совпадений: {count}</p>
       ) : null}
       {response.matches.map((match) => <MatchCard key={`${match.id}:${match.version}`} match={match} />)}
-      <p className={styles.source}>{response.source === "llm" ? "codex.sale" : "Локальные правила"}</p>
+      <p className={styles.source}>
+        {response.source === "llm" ? "codex.sale" : "Локальные правила"}
+        {fallback ? ` · ${fallback}` : null}
+      </p>
     </article>
   );
 }

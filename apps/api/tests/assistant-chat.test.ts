@@ -26,7 +26,7 @@ describe("Assistant chat HTTP", () => {
     runtime = undefined;
   });
 
-  async function boot(rows: unknown[]) {
+  async function boot(rows: unknown[], env: NodeJS.ProcessEnv = {}, operatorToken?: string) {
     await atomicWrite(join(dataDir, LIVE_FILENAME), Buffer.from(JSON.stringify(rows)));
     runtime = await createDashboardRuntime({
       dataDir,
@@ -34,17 +34,80 @@ describe("Assistant chat HTTP", () => {
       itsmTemplate: "https://itsm.example/incidents/{id}?sysId={sysId}",
       capabilities: { demoReset: true, liveAnalysis: false },
     });
-    app = buildApp({ runtime, dataDir, env: {} });
+    app = buildApp({ runtime, dataDir, env, operatorToken });
   }
 
-  async function chat(body: unknown) {
+  async function chat(body: unknown, token?: string) {
     if (!app) throw new Error("app is missing");
     return app.inject({
       method: "POST",
       url: `${API_PREFIX}/assistant/chat`,
       payload: body,
+      headers: token ? { authorization: `Bearer ${token}` } : {},
     });
   }
+
+  const operator = "g20-test-operator";
+  const rows = ["SYN-G20/A", "SYN-G20/B"].map((id) => ({
+    id, header: `Сбой печати ${id.at(-1)}`, priorityId: 3, stateEnum: "Assigned",
+    submitDate: "2026-05-15T09:30:00.000Z", description: "Очередь печати остановилась.",
+  }));
+
+  it("retries the same authorized question after a provider failure and isolates the anonymous cache", async () => {
+    const [a, b] = rows;
+    await boot(rows, { MTS_AI_MODE: "live", CODEX_SALE_API_KEY: "test-key", CODEX_SALE_MODEL: "test-model" }, operator);
+    let failed = false;
+    const provider = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const { input } = JSON.parse(String(init?.body));
+      const { facts } = JSON.parse(input);
+      const id: string = facts.context.incidentId;
+      if (id === b.id && !failed) {
+        failed = true;
+        return new Response("Unavailable", { status: 503 });
+      }
+      return Response.json({
+        status: "completed",
+        output_text: JSON.stringify({ summary: `Данные заявки ${id} проверены.`, nextSteps: [], evidenceIds: [id] }),
+      });
+    });
+    const payload = (id: string) => ({
+      mode: "incident",
+      question: "Что известно по этой заявке?",
+      context: { incidentId: id, incidentVersion: runtime?.getSnapshot().incidents.find((row) => row.id === id)?.version },
+    });
+    const answer = async (id: string, token?: string) => AssistantChatResponseSchema.parse((await chat(payload(id), token)).json());
+
+    expect(await answer(a.id)).toMatchObject({ source: "rules", reason: "rules_mode" });
+    expect(provider).not.toHaveBeenCalled();
+    expect(await answer(a.id, operator)).toMatchObject({ source: "llm", context: { incidentId: a.id } });
+    expect(await answer(b.id, operator)).toMatchObject({ source: "rules", reason: "provider_error" });
+    const recovered = await answer(b.id, operator);
+    expect(recovered).toMatchObject({ source: "llm", context: { incidentId: b.id } });
+    expect(await answer(b.id, operator)).toEqual(recovered);
+    expect((await chat(payload(b.id), "wrong-test-token")).statusCode).toBe(403);
+    const stale = await chat({ ...payload(b.id), context: { incidentId: b.id, incidentVersion: "previous-version" } }, operator);
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: "ASSISTANT_CONTEXT_CHANGED" });
+    expect(provider).toHaveBeenCalledTimes(3);
+
+    for (let index = 0; index < 5; index++) {
+      const extra = await chat({ ...payload(b.id), question: `Повторная проверка ${index}` }, operator);
+      expect(extra.statusCode).toBe(200);
+    }
+    const limited = await chat({ ...payload(b.id), question: "Последующая проверка" }, operator);
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(provider).toHaveBeenCalledTimes(8);
+  });
+
+  it("distinguishes an authorized request with missing live configuration from rules mode", async () => {
+    await boot(rows, { MTS_AI_MODE: "live" }, operator);
+    const payload = {
+      mode: "incident", question: "Что известно по заявке?", context: { incidentId: rows[0].id },
+    };
+    expect((await chat(payload, operator)).json()).toMatchObject({ source: "rules", reason: "not_configured" });
+    expect((await chat(payload)).json()).toMatchObject({ source: "rules", reason: "rules_mode" });
+  });
 
   it("returns matches for incident mode and keeps analysis route working", async () => {
     const subject = {

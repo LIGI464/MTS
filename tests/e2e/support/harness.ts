@@ -198,11 +198,15 @@ async function startResponsesMock(ok: boolean): Promise<{ baseUrl: string; close
       const requestBody = JSON.parse(raw) as { input: string };
       const marker = "\nДанные заявок (JSON):\n";
       const offset = requestBody.input.indexOf(marker);
-      const text = offset >= 0 ? mockPriorityOutput(requestBody.input.slice(offset + marker.length)) : JSON.stringify({
-        summary: "Выжимка мок-провайдера для координатора.",
-        team: null,
-        reason: "Мок подтвердил факты инцидента.",
-      });
+      const text = offset >= 0
+        ? mockPriorityOutput(requestBody.input.slice(offset + marker.length))
+        : requestBody.input.startsWith('{"question":')
+          ? mockAssistantOutput(requestBody.input)
+          : JSON.stringify({
+            summary: "Выжимка мок-провайдера для координатора.",
+            team: null,
+            reason: "Мок подтвердил факты инцидента.",
+          });
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         status: "completed",
@@ -222,6 +226,16 @@ async function startResponsesMock(ok: boolean): Promise<{ baseUrl: string; close
     baseUrl: `http://127.0.0.1:${port}/v1`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
+}
+
+function mockAssistantOutput(input: string): string {
+  const { facts } = JSON.parse(input) as { facts: { incident: { id: string } | null } };
+  const id = facts.incident?.id;
+  return JSON.stringify({
+    summary: id ? `Данные заявки ${id} проверены.` : "Данные пульта проверены.",
+    nextSteps: [],
+    evidenceIds: id ? [id] : [],
+  });
 }
 
 function mockPriorityOutput(json: string): string {

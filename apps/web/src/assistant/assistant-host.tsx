@@ -1,48 +1,35 @@
-import type {
-  AssistantChatHistoryEntry,
-  AssistantChatRequest,
-  AssistantChatResponse,
-  Incident,
-} from "@mts/contracts";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import type { AssistantChatHistoryEntry, AssistantChatRequest, AssistantChatResponse } from "@mts/contracts";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { Icon } from "../icons";
 import { AssistantPanel } from "./assistant-panel";
 import styles from "./assistant.module.css";
-import {
-  createSession,
-  initialAssistantState,
-  reduceAssistant,
-  sessionKeyForIncident,
-  shouldBootstrapIncidentChat,
-  type SessionState,
-} from "./state";
+import { initialAssistantState, reduceAssistant, sessionKeyForIncident, type IncidentContext, type SessionState } from "./state";
 
 export type AssistantClient = (
   payload: AssistantChatRequest,
   token?: string,
+  signal?: AbortSignal,
 ) => Promise<AssistantChatResponse>;
 
 function chatHistory(messages: SessionState["messages"]): AssistantChatHistoryEntry[] {
-  const history: AssistantChatHistoryEntry[] = [];
-  for (const message of messages) {
-    if (message.kind === "user" && message.text.trim()) {
-      history.push({ role: "user", text: message.text.trim() });
-    } else if (message.kind === "assistant") {
-      history.push({ role: "assistant", text: message.response.summary });
-    }
-  }
-  return history.slice(-16);
+  return messages.slice(-16).map((message) => message.kind === "user"
+    ? { role: "user", text: message.text }
+    : { role: "assistant", text: message.response.summary });
 }
 
 export function AssistantHost({
-  detailsOpen,
   incident,
+  contextReady,
+  contextError,
+  retryContext,
   operatorToken,
   requestChat,
   onOpenChange,
 }: {
-  detailsOpen: boolean;
-  incident: Incident | undefined;
+  incident: IncidentContext | null;
+  contextReady: boolean;
+  contextError: string | null;
+  retryContext: () => void;
   operatorToken: string | undefined;
   requestChat: AssistantClient;
   onOpenChange?: (open: boolean) => void;
@@ -50,19 +37,20 @@ export function AssistantHost({
   const [state, dispatch] = useReducer(reduceAssistant, undefined, initialAssistantState);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const bootstrapRef = useRef<Set<string>>(new Set());
-
-  const session = useMemo((): SessionState | null => {
-    const existing = state.sessions[state.activeKey];
-    if (existing) return existing;
-    if (state.phase !== "open") return null;
-    if (state.activeKey === "dashboard") return createSession("dashboard", null);
-    if (!incident) return createSession("incident", null);
-    return createSession("incident", { id: incident.id, title: incident.title, version: incident.version });
-  }, [state, incident]);
-
+  const sequence = useRef(0);
+  const transport = useRef<{ requestId: number; controller: AbortController } | null>(null);
+  const incidentId = incident?.id;
+  const title = incident?.title ?? null;
+  const version = incident?.version;
+  const target = incidentId ? sessionKeyForIncident(incidentId) : "dashboard";
+  const session = state.sessions[target];
   const open = state.phase === "open";
-  const shiftDetails = open && detailsOpen && state.activeKey !== "dashboard";
+  const shiftDetails = open && Boolean(incidentId);
+  const scopeReady = state.activeKey === target && (!incidentId || session?.context.incidentVersion === version);
+
+  useLayoutEffect(() => {
+    dispatch({ type: "sync", target, incident: incidentId ? { id: incidentId, title, version } : null });
+  }, [target, incidentId, title, version]);
 
   useEffect(() => {
     document.body.dataset.assistantOpen = open ? "true" : "false";
@@ -77,63 +65,44 @@ export function AssistantHost({
     onOpenChange?.(open);
   }, [open, onOpenChange]);
 
-  const send = useCallback(async (question: string, active: SessionState) => {
-    const requestId = active.requestId + 1;
-    dispatch({ type: "start", requestId, question: question.trim() });
-    const payload: AssistantChatRequest = {
-      mode: active.mode,
-      question: question.trim(),
-      context: active.context,
-      history: chatHistory(active.messages),
-    };
-    try {
-      const response = await requestChat(payload, operatorToken);
-      dispatch({ type: "success", requestId, response });
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Не удалось получить ответ помощника";
-      dispatch({ type: "failure", requestId, message });
+  useEffect(() => {
+    const pending = session?.pending;
+    if (transport.current && (!scopeReady || transport.current.requestId !== pending?.requestId)) {
+      transport.current.controller.abort();
+      transport.current = null;
     }
-  }, [operatorToken, requestChat]);
+    if (!scopeReady || !contextReady || !session || pending?.phase !== "queued" || transport.current) return;
 
-  const runBootstrap = useCallback((key: string, active: SessionState) => {
-    if (active.mode !== "incident" || !shouldBootstrapIncidentChat(active.messages) || bootstrapRef.current.has(key)) return;
-    bootstrapRef.current.add(key);
-    void send("", active);
-  }, [send]);
+    const { requestId, question } = pending;
+    const controller = new AbortController();
+    transport.current = { requestId, controller };
+    dispatch({ type: "send", target, requestId });
+    const payload: AssistantChatRequest = {
+      mode: session.mode, question, context: session.context, history: chatHistory(session.messages),
+    };
+    void requestChat(payload, operatorToken, controller.signal).then(
+      (response) => {
+        if (!controller.signal.aborted) dispatch({ type: "success", target, requestId, response });
+      },
+      (error: unknown) => {
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : "Не удалось получить ответ помощника.";
+        dispatch({ type: "failure", target, requestId, message });
+      },
+    );
+  }, [session, scopeReady, contextReady, target, operatorToken, requestChat]);
 
-  function openAssistant(targetIncident: Incident | null) {
-    const target = targetIncident ? sessionKeyForIncident(targetIncident.id) : "dashboard";
-    const incidentInfo = targetIncident
-      ? { id: targetIncident.id, title: targetIncident.title, version: targetIncident.version }
-      : null;
-    launcherRef.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : launcherRef.current;
-    dispatch({ type: "open", target, incident: incidentInfo });
+  useEffect(() => () => transport.current?.controller.abort(), []);
+
+  function openAssistant() {
+    dispatch({ type: "open", target, incident });
     requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
 
-  function collapseAssistant() {
+  const collapseAssistant = useCallback(() => {
     dispatch({ type: "collapse" });
     requestAnimationFrame(() => launcherRef.current?.focus({ preventScroll: true }));
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    if (!detailsOpen && state.activeKey !== "dashboard") {
-      dispatch({ type: "switch", target: "dashboard", incident: null });
-    }
-  }, [detailsOpen, open, state.activeKey]);
-
-  useEffect(() => {
-    if (!open || !incident) return;
-    const key = sessionKeyForIncident(incident.id);
-    if (state.activeKey === key) return;
-    dispatch({ type: "switch", target: key, incident: { id: incident.id, title: incident.title, version: incident.version } });
-  }, [incident?.id, incident?.version, incident?.title, open, state.activeKey, incident]);
-
-  useEffect(() => {
-    if (!open || !session) return;
-    runBootstrap(state.activeKey, session);
-  }, [open, session, state.activeKey, runBootstrap]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -145,21 +114,18 @@ export function AssistantHost({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [open]);
+  }, [open, collapseAssistant]);
 
   function submitCurrent() {
-    if (!session || session.pending) return;
-    const text = session.draft.trim();
-    if (!text && session.mode === "dashboard") return;
-    void send(text, session);
+    const question = session?.draft.trim();
+    if (!scopeReady || !question || session?.pending) return;
+    dispatch({ type: "queue", target, requestId: ++sequence.current, question });
   }
 
-  function retryLast() {
-    if (!session) return;
-    dispatch({ type: "clear_error" });
-    const lastError = session.messages.findLast((entry) => entry.kind === "error");
-    if (lastError?.kind !== "error") return;
-    void send(lastError.retry.question, { ...session, context: lastError.retry.context, mode: lastError.retry.mode });
+  function cancel() {
+    transport.current?.controller.abort();
+    dispatch({ type: "cancel", target });
+    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
 
   return (
@@ -173,7 +139,7 @@ export function AssistantHost({
         tabIndex={open ? -1 : undefined}
         aria-expanded={open}
         aria-controls="mts-assistant-panel"
-        onClick={() => openAssistant(detailsOpen && incident ? incident : null)}
+        onClick={openAssistant}
       >
         <span className={styles.launcherMark} aria-hidden="true"><Icon name="clipboard-data" size={22} /></span>
         <span className={styles.launcherText}>
@@ -183,15 +149,17 @@ export function AssistantHost({
         <Icon name="arrow-left" size={18} />
       </button>
 
-      <div className={styles.shell} data-open={open} aria-hidden={!open}>
+      <div className={styles.shell} data-open={open} aria-hidden={!open} inert={!open}>
         {session ? (
           <AssistantPanel
             state={session}
             inputRef={inputRef}
+            contextError={contextError}
             onDraft={(value) => dispatch({ type: "draft", value })}
             onSubmit={submitCurrent}
             onCollapse={collapseAssistant}
-            onRetry={retryLast}
+            onCancel={cancel}
+            onRetryContext={retryContext}
           />
         ) : null}
       </div>

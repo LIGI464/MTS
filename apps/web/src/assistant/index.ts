@@ -1,2 +1,2 @@
 export { AssistantHost, type AssistantClient } from "./assistant-host";
-export { reduceAssistant, sessionKeyForIncident, shouldBootstrapIncidentChat } from "./state";
+export { reduceAssistant, sessionKeyForIncident } from "./state";

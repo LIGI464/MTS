@@ -160,6 +160,14 @@
   color: var(--critical);
 }
 
+.pendingActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pendingActions button,
 .errorMessage button,
 .send {
   min-height: 38px;

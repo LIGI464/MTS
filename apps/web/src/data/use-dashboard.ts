@@ -28,7 +28,7 @@ export function useDashboard(operatorToken?: string): {
   incidentClient: IncidentClient;
   connection: Connection;
   runAnalysis: (id: string, token?: string) => Promise<AnalysisResult>;
-  requestAssistantChat: (payload: AssistantChatRequest, token?: string) => Promise<AssistantChatResponse>;
+  requestAssistantChat: typeof requestAssistantChat;
   resetDemo: (token: string) => Promise<Snapshot>;
   stepMock?: (step: DemoStep) => void;
 } {
@@ -108,11 +108,13 @@ export function useDashboard(operatorToken?: string): {
     return () => window.clearInterval(timer);
   }, []);
 
-  async function requestAssistant(
+  const requestAssistant = useCallback(async (
     payload: AssistantChatRequest,
     token?: string,
-  ): Promise<AssistantChatResponse> {
-    if (!mockMode) return requestAssistantChat(payload, token);
+    signal?: AbortSignal,
+  ): Promise<AssistantChatResponse> => {
+    if (!mockMode) return requestAssistantChat(payload, token, signal);
+    signal?.throwIfAborted();
     const now = new Date().toISOString();
     const incident = payload.context.incidentId
       ? frameRef.current.snapshot?.incidents.find((item) => item.id === payload.context.incidentId)
@@ -155,7 +157,7 @@ export function useDashboard(operatorToken?: string): {
         href: "/itsm/incidents/INC-HISTORY",
       }] : [],
     });
-  }
+  }, [mockMode]);
 
   async function runAnalysis(id: string, token?: string): Promise<AnalysisResult> {
     if (!mockMode) return requestAnalysis(id, token);
