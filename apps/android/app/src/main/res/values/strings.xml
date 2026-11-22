@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Goida Board</string>
+    <string name="loading">Загрузка панели инцидентов</string>
+    <string name="page_unavailable">Не удалось загрузить панель инцидентов.</string>
+    <string name="retry">Повторить</string>
+    <string name="no_link_handler">Не удалось открыть ссылку.</string>
+</resources>
