@@ -9,6 +9,17 @@ export type ActivityEvent = {
   at: string;
 };
 
+export const ACTIVITY_LABELS = {
+  "incident.new": "Новый инцидент",
+  "critical.new": "Новый критический инцидент",
+  "coordinator.assigned": "Передан группе координаторов",
+  "coordinator.changed": "Координатор изменён",
+  "critical.resolved": "Критический инцидент решён",
+  "sla.near": "Срок близко",
+  "sla.overdue": "Срок просрочен",
+  "demo.reset": "Набор восстановлен",
+} satisfies Record<ActivityEvent["kind"], string>;
+
 export type IncidentAttention = {
   key: string;
   incidentId: string;

@@ -84,3 +84,29 @@
     padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
   }
 }
+
+.workload { background: var(--canvas); }
+
+.workloadCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 10px 0;
+}
+
+.workloadCounts div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.workloadCounts dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.workloadCounts dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
