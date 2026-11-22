@@ -68,44 +68,46 @@ export function IncidentDetails({ id, incident, nowMs, client, revision, recomme
           onEscapeKeyDown={(event) => { if (assistantEscape) event.preventDefault(); }}
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}>
-          <div className="detail-heading">
+          <header className="detail-heading">
             <div>
               <Dialog.Description className="detail-id" data-numeric="tabular">{id}</Dialog.Description>
               <Dialog.Title>{known?.title ?? "Инцидент"}</Dialog.Title>
             </div>
             <Dialog.Close className="detail-close" aria-label="Закрыть"><Icon name="x-lg" size={21} /></Dialog.Close>
+          </header>
+          <div className={styles.body} role="region" aria-label="Содержимое инцидента" tabIndex={0}>
+            {recommendation ? (
+              <section className={styles.recommendation} aria-label="Обоснование рекомендации">
+                <strong>{recommendation.source === "llm" ? "Приоритет ИИ" : "Локальные правила"} · {recommendation.entry.rank} в ленте</strong>
+                <p>{recommendation.entry.reason}</p>
+              </section>
+            ) : null}
+            {sla ? (
+              <p className="detail-sla" data-tone={sla.tone} data-numeric="tabular" title={sla.hint}>
+                <span>SLA</span><strong>{sla.status}</strong>{sla.duration ? <span>{sla.duration}</span> : null}
+              </p>
+            ) : null}
+            {known ? (
+              <FieldList entries={[
+                ["Приоритет", priorityLabel(known.priority)], ["Статус", known.stateLabel],
+                ["Продукт", known.product], ["Сервис", known.service], ["Регистрация", formatMoscow(known.createdAt)],
+                ["Срок SLA", known.dueAt && formatMoscow(known.dueAt)], ["Завершение", known.resolvedAt && formatMoscow(known.resolvedAt)],
+                ["Команда", known.team], ["Исполнитель", known.assignee],
+                ["Координатор", <CoordinatorValue coordinator={current} />],
+              ]} />
+            ) : null}
+            {detail.isPending ? <p role="status">Загружаем полную запись…</p> : null}
+            {detail.isError ? (
+              <div className={styles.failure}>
+                <p role="alert">{detail.error.message}</p>
+                <button type="button" className={styles.button} onClick={() => void detail.refetch()}>Повторить загрузку</button>
+              </div>
+            ) : null}
+            <a className="detail-itsm" href={itsmHref(incident ?? { id, itsmUrl: null })} target="_blank" rel="noopener noreferrer">
+              В ITSM <Icon name="box-arrow-up-right" />
+            </a>
+            {record ? <FullRecord detail={record} /> : null}
           </div>
-          {recommendation ? (
-            <section className={styles.recommendation} aria-label="Обоснование рекомендации">
-              <strong>{recommendation.source === "llm" ? "Приоритет ИИ" : "Локальные правила"} · {recommendation.entry.rank} в ленте</strong>
-              <p>{recommendation.entry.reason}</p>
-            </section>
-          ) : null}
-          {sla ? (
-            <p className="detail-sla" data-tone={sla.tone} data-numeric="tabular" title={sla.hint}>
-              <span>SLA</span><strong>{sla.status}</strong>{sla.duration ? <span>{sla.duration}</span> : null}
-            </p>
-          ) : null}
-          {known ? (
-            <FieldList entries={[
-              ["Приоритет", priorityLabel(known.priority)], ["Статус", known.stateLabel],
-              ["Продукт", known.product], ["Сервис", known.service], ["Регистрация", formatMoscow(known.createdAt)],
-              ["Срок SLA", known.dueAt && formatMoscow(known.dueAt)], ["Завершение", known.resolvedAt && formatMoscow(known.resolvedAt)],
-              ["Команда", known.team], ["Исполнитель", known.assignee],
-              ["Координатор", <CoordinatorValue coordinator={current} />],
-            ]} />
-          ) : null}
-          {detail.isPending ? <p role="status">Загружаем полную запись…</p> : null}
-          {detail.isError ? (
-            <div className={styles.failure}>
-              <p role="alert">{detail.error.message}</p>
-              <button type="button" className={styles.button} onClick={() => void detail.refetch()}>Повторить загрузку</button>
-            </div>
-          ) : null}
-          <a className="detail-itsm" href={itsmHref(incident ?? { id, itsmUrl: null })} target="_blank" rel="noopener noreferrer">
-            В ITSM <Icon name="box-arrow-up-right" />
-          </a>
-          {record ? <FullRecord detail={record} /> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

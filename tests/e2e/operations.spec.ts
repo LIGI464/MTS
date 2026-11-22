@@ -5,36 +5,69 @@ import { OPERATOR_TOKEN, readLive, startDashboard, writeLive } from "./support/h
 
 async function mockAudio(page: Page) {
   await page.addInitScript(() => {
-    Reflect.set(window, "__testNotes", 0);
+    Reflect.set(window, "__testChimes", 0);
+    Reflect.set(window, "__testAudioClosed", 0);
     class AudioStub {
       currentTime = 0;
       destination = {};
       state = "suspended";
+      clip: { duration: number } | null = null;
       async resume() { this.state = "running"; }
-      async suspend() { this.state = "suspended"; }
-      async close() { this.state = "closed"; }
-      createOscillator() {
+      async close() {
+        this.state = "closed";
+        Reflect.set(window, "__testAudioClosed", Number(Reflect.get(window, "__testAudioClosed")) + 1);
+      }
+      async decodeAudioData(bytes: ArrayBuffer) {
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const fingerprint = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        Reflect.set(window, "__testAudioHash", fingerprint);
+        this.clip = { duration: 1.368 };
+        return this.clip;
+      }
+      createBufferSource() {
+        const clip = this.clip;
         return {
-          frequency: {},
+          buffer: null,
           connect: (target: unknown) => target,
           disconnect() {},
-          stop() {},
-          start() { Reflect.set(window, "__testNotes", Number(Reflect.get(window, "__testNotes")) + 1); },
-        };
-      }
-      createGain() {
-        return {
-          gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
-          connect() {},
-          disconnect() {},
+          start() {
+            if (!clip || this.buffer !== clip) throw new Error("The original MP3 has not been decoded.");
+            Reflect.set(window, "__testChimes", Number(Reflect.get(window, "__testChimes")) + 1);
+          },
         };
       }
     }
     Reflect.set(window, "AudioContext", AudioStub);
   });
-  // A chime consists of the two oscillators used by the application.
-  return async () => (await page.evaluate(() => Reflect.get(window, "__testNotes") as number)) / 2;
+  return async () => page.evaluate(() => Reflect.get(window, "__testChimes") as number);
 }
+
+const notificationSoundHash = "3ddfc975984c01135d0759950fbb22a960eb511948b7cea10413b3a7ce49281d";
+
+test("G10 повторяет загрузку исходного MP3 после ошибки включения звука", async ({ page }) => {
+  const chimes = await mockAudio(page);
+  await page.route("**/pda_4LbLWWH*.mp3", (route) => route.fulfill({ status: 503 }), { times: 1 });
+  const app = await startDashboard("rules", "", { incidents: [] });
+  try {
+    await page.goto(`${app.url}/admin/incidents`);
+    await expect(page.getByText("Данные актуальны")).toBeVisible();
+    const sound = page.getByRole("button", { name: "Звук оповещений" });
+    await sound.click();
+    await expect(sound).toContainText("Звук недоступен");
+    await expect(sound).toHaveAttribute("aria-pressed", "false");
+    expect(await page.evaluate(() => Reflect.get(window, "__testAudioClosed"))).toBe(1);
+
+    await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "true");
+    expect(await page.evaluate(() => Reflect.get(window, "__testAudioHash"))).toBe(notificationSoundHash);
+    expect(await chimes()).toBe(0);
+    await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "false");
+    expect(await page.evaluate(() => Reflect.get(window, "__testAudioClosed"))).toBe(2);
+  } finally {
+    await app.stop();
+  }
+});
 
 async function inspectAndClose(page: Page, card: Locator) {
   const details = card.getByRole("button", { name: "Подробнее", exact: true });
@@ -121,9 +154,10 @@ test("D30 публикует тихие приоритеты один раз и 
   }
 });
 
-test("D20 показывает пустую сводку, два ряда и обе секции сроков", async ({ page }) => {
+test("G10 показывает мягкое наведение только в нижней полосе сводки", async ({ page }, testInfo) => {
   const app = await startDashboard("rules", "", { incidents: [] });
   try {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${app.url}/admin/incidents`);
     await expect(page.getByText("Данные актуальны")).toBeVisible();
     const summary = page.getByRole("group", { name: "Сводка инцидентов" });
@@ -152,24 +186,53 @@ test("D20 показывает пустую сводку, два ряда и о�
     await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(deadlines.getByText("Нет инцидентов")).toHaveCount(0);
+
+    const metrics = summary.locator("[data-category]");
+    const visibleFog = () => metrics.evaluateAll((buttons) => buttons.flatMap((button, index) => {
+      const style = getComputedStyle(button, "::after");
+      return style.content !== "none" && style.opacity === "1" ? [index] : [];
+    }));
+    await metrics.nth(2).focus();
+    await expect(metrics.nth(2)).toHaveCSS("outline-color", "rgb(0, 101, 206)");
+    await expect(metrics.nth(2)).toHaveCSS("outline-width", "2px");
+    expect(await visibleFog()).toEqual([]);
+    await metrics.nth(2).blur();
+
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
       await expect(summary).toBeInViewport();
-      const segments = summary.locator("[data-category]");
-      for (const index of [2, 3, 4, 5, 6]) {
-        const segment = segments.nth(index);
-        await segment.hover();
-        const outlines = await segments.evaluateAll((buttons) => buttons.map((button) => {
-          const style = getComputedStyle(button, "::after");
-          return [style.content, style.borderColor, style.borderWidth, style.transform, style.pointerEvents];
-        }));
-        expect(outlines.filter(([content]) => content !== "none")).toHaveLength(1);
-        expect(outlines[index]).toEqual(['""', "rgb(255, 0, 50)", "1px", "matrix(1, 0, -0.267949, 1, 0, 0)", "none"]);
+      const heading = page.getByRole("heading", { name: "Goida-board" });
+      await heading.hover();
+      expect(await visibleFog()).toEqual([]);
+      if (viewport.width === 1440) await summary.screenshot({ path: testInfo.outputPath("summary-rest.png") });
+      for (const index of [0, 1]) {
+        const upperTile = metrics.nth(index);
+        await expect(upperTile).toHaveCSS("border-top-color", "rgb(226, 229, 235)");
+        await upperTile.hover();
+        await expect(upperTile).toHaveCSS("border-top-color", "rgb(98, 108, 119)");
+        expect(await visibleFog()).toEqual([]);
+        await heading.hover();
       }
-      await page.getByRole("heading", { name: "Goida-board" }).hover();
-      expect(await segments.evaluateAll((buttons) => buttons.every((button) =>
-        getComputedStyle(button, "::after").content === "none"))).toBe(true);
+      for (const index of [2, 3, 4, 5, 6]) {
+        const segment = metrics.nth(index);
+        await segment.hover();
+        expect(await visibleFog()).toEqual([index]);
+        const layer = await segment.evaluate((button) => {
+          const { backgroundColor, borderWidth, maskImage, maskComposite, pointerEvents } = getComputedStyle(button, "::after");
+          return { backgroundColor, borderWidth, maskImage, maskComposite, pointerEvents };
+        });
+        expect(layer).toMatchObject({
+          backgroundColor: "rgb(226, 229, 235)", borderWidth: "0px", pointerEvents: "none",
+          maskImage: expect.stringMatching(/linear-gradient.*linear-gradient/),
+          maskComposite: expect.stringMatching(/^intersect/),
+        });
+        if (index === 4 && viewport.width === 1440) {
+          await summary.screenshot({ path: testInfo.outputPath("summary-hover.png") });
+        }
+      }
+      await heading.hover();
+      expect(await visibleFog()).toEqual([]);
       const layout = await groups.evaluateAll((items) => items.map((item) => {
         const { x, y } = item.getBoundingClientRect();
         return { id: item.id, x, y };
@@ -285,12 +348,17 @@ test("P20 группирует звук, сохраняет точную под�
     await expect(critical.locator("strong")).toHaveText("3");
     await expect(critical).not.toHaveAttribute("data-unread", "true");
     await expect(critical).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
+    const criticalGlow = await critical.evaluate((button) => getComputedStyle(button).boxShadow);
+    expect(criticalGlow).not.toBe("none");
     await sound.click();
+    await expect(sound).toHaveAttribute("aria-pressed", "true");
     expect(await chimes()).toBe(0);
 
     await writeLive(app.dataDir, JSON.stringify([...rows, next]));
     await expect(critical.locator("strong")).toHaveText("4");
     await expect(critical).toHaveAttribute("data-unread", "true");
+    await expect(critical).toHaveCSS("border-top-color", "rgb(255, 0, 50)");
+    await expect(critical).toHaveCSS("box-shadow", criticalGlow);
     await expect(coordinator).toHaveAttribute("data-unread", "true");
     await expect(near).toHaveAttribute("data-unread", "true");
     await expect.poll(chimes).toBe(1);

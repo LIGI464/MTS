@@ -1,77 +1,99 @@
 import { useEffect, useRef, useState } from "react";
+import notificationUrl from "./pda_4LbLWWH.mp3";
 
-function playChime(context: AudioContext, start: number): void {
-  for (const [index, frequency] of [587.33, 783.99].entries()) {
-    const time = start + index * .13;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(.001, time);
-    gain.gain.exponentialRampToValueAtTime(.13, time + .025);
-    gain.gain.exponentialRampToValueAtTime(.001, time + .16);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.onended = () => {
-      oscillator.disconnect();
-      gain.disconnect();
-    };
-    oscillator.start(time);
-    oscillator.stop(time + .17);
-  }
+type IncidentSound = {
+  context: AudioContext;
+  loading: AbortController;
+  clip: AudioBuffer | null;
+  nextStart: number;
+};
+
+async function loadClip({ context, loading }: IncidentSound): Promise<AudioBuffer> {
+  const response = await fetch(notificationUrl, { signal: loading.signal });
+  if (!response.ok) throw new Error("Не удалось загрузить звук оповещений.");
+  return context.decodeAudioData(await response.arrayBuffer());
+}
+
+function disposeSound(sound: IncidentSound | null): void {
+  if (!sound) return;
+  sound.loading.abort();
+  if (sound.context.state !== "closed") void sound.context.close().catch(() => {});
+}
+
+function playClip(context: AudioContext, clip: AudioBuffer, start: number): void {
+  const source = context.createBufferSource();
+  source.buffer = clip;
+  source.connect(context.destination);
+  source.onended = () => source.disconnect();
+  source.start(start);
 }
 
 export function useIncidentSound(sequence: number) {
   const [enabled, setEnabled] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [activating, setActivating] = useState(false);
-  const contextRef = useRef<AudioContext | null>(null);
-  const lastPlayed = useRef(0);
-  const nextStart = useRef(0);
+  const soundRef = useRef<IncidentSound | null>(null);
+  const lastSequence = useRef(0);
   const currentSequence = useRef(sequence);
 
   useEffect(() => {
     currentSequence.current = sequence;
-    const count = sequence - lastPlayed.current;
-    lastPlayed.current = sequence;
-    const context = contextRef.current;
-    if (!enabled || count <= 0 || context?.state !== "running") return;
-    let start = Math.max(context.currentTime + .015, nextStart.current);
+    const count = sequence - lastSequence.current;
+    lastSequence.current = sequence;
+    const sound = soundRef.current;
+    if (!enabled || count <= 0 || !sound?.clip || sound.context.state !== "running") return;
+    let start = Math.max(sound.context.currentTime + .015, sound.nextStart);
     for (let index = 0; index < count; index++) {
-      playChime(context, start);
-      start += .34;
+      playClip(sound.context, sound.clip, start);
+      start += sound.clip.duration + .05;
     }
-    nextStart.current = start;
+    sound.nextStart = start;
   }, [enabled, sequence]);
 
   useEffect(() => () => {
-    const context = contextRef.current;
-    contextRef.current = null;
-    if (context && context.state !== "closed") void context.close().catch(() => {});
+    const sound = soundRef.current;
+    soundRef.current = null;
+    disposeSound(sound);
   }, []);
 
   async function toggle() {
     if (enabled) {
       setEnabled(false);
-      const context = contextRef.current;
-      contextRef.current = null;
-      nextStart.current = 0;
-      void context?.close().catch(() => {});
+      const sound = soundRef.current;
+      soundRef.current = null;
+      disposeSound(sound);
       return;
     }
-    if (activating) return;
-    setActivating(true);
+    if (soundRef.current) return;
+    let context: AudioContext;
     try {
-      const context = contextRef.current ?? new AudioContext();
-      contextRef.current = context;
-      await context.resume();
-      lastPlayed.current = Math.max(lastPlayed.current, currentSequence.current);
-      setUnavailable(false);
-      setEnabled(true);
+      context = new AudioContext();
     } catch {
       setUnavailable(true);
-    } finally {
-      setActivating(false);
+      return;
     }
+
+    const sound: IncidentSound = { context, loading: new AbortController(), clip: null, nextStart: 0 };
+    soundRef.current = sound;
+    setActivating(true);
+    let clip: AudioBuffer | null;
+    try {
+      [, clip] = await Promise.all([context.resume(), loadClip(sound)]);
+    } catch {
+      clip = null;
+    }
+    if (soundRef.current !== sound) return;
+    setActivating(false);
+    if (!clip || context.state !== "running") {
+      soundRef.current = null;
+      disposeSound(sound);
+      setUnavailable(true);
+      return;
+    }
+    sound.clip = clip;
+    lastSequence.current = Math.max(lastSequence.current, currentSequence.current);
+    setUnavailable(false);
+    setEnabled(true);
   }
 
   return { enabled, unavailable, activating, toggle };
